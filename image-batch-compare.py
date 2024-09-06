@@ -79,10 +79,18 @@ class SimultaneousComparisonTool:
 
         # Configure Treeview style
         style = ttk.Style()
-        style.configure("Treeview", font=('Helvetica', self.get_font_size(0.8)))
+        font_size = self.get_font_size(0.8)
+        
+        style.configure("Treeview", font=('Helvetica', font_size))
         style.configure("Treeview.Heading", font=('Helvetica', self.get_font_size(0.9), "bold"))
 
-        self.folder_tree = ttk.Treeview(self.tree_frame, columns=("path",), show="headings")
+        # Calculate row height based on font size
+        row_height = font_size * 2  # Adjust this multiplier as needed
+
+        # Configure row height and padding
+        style.configure("Treeview", rowheight=row_height)
+
+        self.folder_tree = ttk.Treeview(self.tree_frame, columns=("path",), show="headings", style="Treeview")
         self.folder_tree.heading("path", text="Folder Paths")
         self.folder_tree.column("path", anchor="w")
         self.folder_tree.grid(row=0, column=0, sticky="nsew")
