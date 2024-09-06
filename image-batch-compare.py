@@ -4,12 +4,24 @@ import random
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
+import sys
 
 class SimultaneousComparisonTool:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Multi-Folder Image Comparison")
-        self.root.geometry("800x600")
+        self.root.geometry("1280x720")
+        
+        # Get screen resolution
+        self.screen_width = self.root.winfo_screenwidth()
+        self.screen_height = self.root.winfo_screenheight()
+        
+        # Calculate base font size
+        self.base_font_size = min(self.screen_width // 100, self.screen_height // 100)
+        
+        # Set initial DPI awareness
+        self.set_dpi_awareness(True)
+        
         self.folders = []
         self.folder_images = {}
         self.current_images = []
@@ -17,7 +29,26 @@ class SimultaneousComparisonTool:
         self.current_index = 0
         self.resize_timer = None
         self.current_image_set = []
+        
         self.setup_ui()
+
+    def set_dpi_awareness(self, aware):
+        if sys.platform.startswith('win'):
+            try:
+                import ctypes
+                if aware:
+                    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+                else:
+                    ctypes.windll.shcore.SetProcessDpiAwareness(0)
+            except:
+                pass
+        elif sys.platform.startswith('linux'):
+            # For Linux, we can adjust the scaling factor of the root window
+            scale = self.root.winfo_fpixels('1i') / 72.0 if aware else 1.0
+            self.root.tk.call('tk', 'scaling', scale)
+
+    def get_font_size(self, size_factor):
+        return int(self.base_font_size * size_factor * 4)
 
     def setup_ui(self):
         self.root.grid_columnconfigure(0, weight=1)
@@ -29,18 +60,27 @@ class SimultaneousComparisonTool:
         self.main_frame.grid_rowconfigure(1, weight=1)
 
         self.control_frame = ttk.Frame(self.main_frame)
-        self.control_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
+        self.control_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=10)
         self.control_frame.columnconfigure(1, weight=1)
 
-        ttk.Button(self.control_frame, text="Add Folder", command=self.add_folder).grid(row=0, column=0, padx=5)
-        ttk.Button(self.control_frame, text="Remove Folder", command=self.remove_folder).grid(row=0, column=1, padx=5)
-        self.start_button = ttk.Button(self.control_frame, text="Start Comparison", command=self.start_comparison)
-        self.start_button.grid(row=0, column=2, padx=5)
+        # Configure button style
+        button_style = ttk.Style()
+        button_style.configure('Large.TButton', padding=(self.get_font_size(2.5), self.get_font_size(1.25)), font=('Helvetica', self.get_font_size(1)))
+
+        ttk.Button(self.control_frame, text="Add Folder", command=self.add_folder, style='Large.TButton').grid(row=0, column=0, padx=10, pady=10)
+        ttk.Button(self.control_frame, text="Remove Folder", command=self.remove_folder, style='Large.TButton').grid(row=0, column=1, padx=10, pady=10)
+        self.start_button = ttk.Button(self.control_frame, text="Start Comparison", command=self.start_comparison, style='Large.TButton')
+        self.start_button.grid(row=0, column=2, padx=10, pady=10)
 
         self.tree_frame = ttk.Frame(self.main_frame)
-        self.tree_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
+        self.tree_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=10)
         self.tree_frame.grid_columnconfigure(0, weight=1)
         self.tree_frame.grid_rowconfigure(0, weight=1)
+
+        # Configure Treeview style
+        style = ttk.Style()
+        style.configure("Treeview", font=('Helvetica', self.get_font_size(0.8)))
+        style.configure("Treeview.Heading", font=('Helvetica', self.get_font_size(0.9), "bold"))
 
         self.folder_tree = ttk.Treeview(self.tree_frame, columns=("path",), show="headings")
         self.folder_tree.heading("path", text="Folder Paths")
@@ -86,6 +126,10 @@ class SimultaneousComparisonTool:
         if len(self.folders) < 2:
             messagebox.showwarning("Warning", "Please add at least two folders for comparison.")
             return
+        
+        # Disable DPI awareness when starting comparison
+        self.set_dpi_awareness(False)
+        
         self.main_frame.grid_remove()
         self.image_frame.grid()
         self.current_index = 0
@@ -93,6 +137,9 @@ class SimultaneousComparisonTool:
         self.display_current_set()
 
     def stop_comparison(self):
+        # Re-enable DPI awareness when stopping comparison
+        self.set_dpi_awareness(True)
+        
         self.image_frame.grid_remove()
         self.main_frame.grid()
         self.current_index = 0
@@ -100,6 +147,10 @@ class SimultaneousComparisonTool:
         self.current_image_set = []
 
     def load_next_image_set(self):
+        if not self.folder_images:  # Check if there are any folders with images
+            self.show_results()
+            return
+
         max_images = max(len(images) for images in self.folder_images.values())
         if self.current_index >= max_images:
             self.show_results()
@@ -116,59 +167,69 @@ class SimultaneousComparisonTool:
             else:
                 self.current_image_set.append((folder, None))
 
+        if not any(image_path for _, image_path in self.current_image_set):
+            self.show_results()  # If no valid images in this set, show results
+
     def display_current_set(self):
         self.canvas.delete("all")
         self.current_images = []
 
-        window_width = self.root.winfo_width()
-        window_height = self.root.winfo_height()
-        max_grid_width = int(window_width * 0.8)
+        window_width = self.canvas.winfo_width()
+        window_height = self.canvas.winfo_height()
         num_images = len(self.current_image_set)
         
-        # Add a safety check to prevent division by zero
-        self.grid_size = max(1, math.ceil(math.sqrt(num_images)))
-        
-        rows = math.ceil(num_images / self.grid_size)
-        cols = min(num_images, self.grid_size)
-        cell_width = min(max_grid_width // cols, window_height // rows) if cols > 0 and rows > 0 else 0
-        cell_height = window_height // rows if rows > 0 else 0
+        if num_images == 0:
+            # Display a message when there are no images
+            self.canvas.create_text(window_width // 2, window_height // 2,
+                                    text="No images to display", anchor=tk.CENTER,
+                                    font=('Helvetica', self.get_font_size(1)))
+            return
 
-        total_grid_width = cols * cell_width
-        left_margin = (window_width - total_grid_width) // 2
+        cols = min(3, num_images)  # Maximum of 3 columns
+        rows = math.ceil(num_images / cols)
+        
+        cell_width = window_width // cols
+        cell_height = window_height // rows
 
         for i, (folder, image_path) in enumerate(self.current_image_set):
-            row = i // self.grid_size
-            col = i % self.grid_size
+            row = i // cols
+            col = i % cols
             
             if image_path:
                 try:
-                    pil_img = Image.open(image_path)
-                    img_width, img_height = pil_img.size
-                    aspect_ratio = img_width / img_height
+                    with Image.open(image_path) as pil_img:
+                        if pil_img.mode != 'RGB':
+                            pil_img = pil_img.convert('RGB')
+                        
+                        img_width, img_height = pil_img.size
+                        aspect_ratio = img_width / img_height
 
-                    new_height = cell_height
-                    new_width = int(cell_height * aspect_ratio)
+                        if aspect_ratio > cell_width / cell_height:
+                            new_width = cell_width
+                            new_height = int(cell_width / aspect_ratio)
+                        else:
+                            new_height = cell_height
+                            new_width = int(cell_height * aspect_ratio)
 
-                    if new_width > cell_width:
-                        new_width = cell_width
-                        new_height = int(cell_width / aspect_ratio)
-
-                    pil_img = pil_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                    img = ImageTk.PhotoImage(pil_img)
-                    x = left_margin + col * cell_width + (cell_width - new_width) // 2
-                    y = row * cell_height + (cell_height - new_height) // 2
-                    image_item = self.canvas.create_image(x, y, anchor=tk.NW, image=img)
-                    self.canvas.tag_bind(image_item, "<Button-1>", lambda e, f=folder: self.vote(f))
-                    self.current_images.append((img, image_item))
+                        pil_img = pil_img.resize((new_width, new_height), Image.LANCZOS)
+                        
+                        img = ImageTk.PhotoImage(pil_img)
+                        x = col * cell_width + (cell_width - new_width) // 2
+                        y = row * cell_height + (cell_height - new_height) // 2
+                        image_item = self.canvas.create_image(x, y, anchor=tk.NW, image=img)
+                        self.canvas.tag_bind(image_item, "<Button-1>", lambda e, f=folder: self.vote(f))
+                        self.current_images.append((img, image_item))
                 except Exception as e:
                     print(f"Error loading image {image_path}: {e}")
-                    self.canvas.create_text(left_margin + col * cell_width + cell_width // 2, 
+                    self.canvas.create_text(col * cell_width + cell_width // 2, 
                                             row * cell_height + cell_height // 2,
-                                            text="Error loading image", anchor=tk.CENTER)
+                                            text="Error loading image", anchor=tk.CENTER,
+                                            font=('Helvetica', self.get_font_size(0.8)))
             else:
-                self.canvas.create_text(left_margin + col * cell_width + cell_width // 2, 
+                self.canvas.create_text(col * cell_width + cell_width // 2, 
                                         row * cell_height + cell_height // 2,
-                                        text="No image", anchor=tk.CENTER)
+                                        text="No image", anchor=tk.CENTER,
+                                        font=('Helvetica', self.get_font_size(0.8)))
 
         self.root.update_idletasks()
 
