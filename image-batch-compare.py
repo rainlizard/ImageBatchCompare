@@ -65,7 +65,7 @@ class SimultaneousComparisonTool:
 
         # Configure button style
         button_style = ttk.Style()
-        button_style.configure('Large.TButton', padding=(self.get_font_size(2.5), self.get_font_size(1.25)), font=('Helvetica', self.get_font_size(1)))
+        button_style.configure('Large.TButton', padding=(self.get_font_size(1.0), self.get_font_size(1.0)), font=('Helvetica', self.get_font_size(1)))
 
         ttk.Button(self.control_frame, text="Add Folder", command=self.add_folder, style='Large.TButton').grid(row=0, column=0, padx=10, pady=10)
         ttk.Button(self.control_frame, text="Remove Folder", command=self.remove_folder, style='Large.TButton').grid(row=0, column=1, padx=10, pady=10)
