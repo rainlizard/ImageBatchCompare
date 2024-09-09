@@ -29,6 +29,7 @@ class SimultaneousComparisonTool:
         self.current_index = 0
         self.resize_timer = None
         self.current_image_set = []
+        self.total_comparisons = 0  # New variable to store total number of comparisons
         
         self.setup_ui()
 
@@ -141,6 +142,8 @@ class SimultaneousComparisonTool:
         self.main_frame.grid_remove()
         self.image_frame.grid()
         self.current_index = 0
+        self.total_comparisons = max(len(images) for images in self.folder_images.values())
+        self.update_title()  # Update the title with the initial counter
         self.load_next_image_set()
         self.display_current_set()
 
@@ -153,14 +156,17 @@ class SimultaneousComparisonTool:
         self.current_index = 0
         self.votes = {folder: 0 for folder in self.folders}
         self.current_image_set = []
+        self.root.title("Multi-Folder Image Comparison")  # Reset the title
+
+    def update_title(self):
+        self.root.title(f"Multi-Folder Image Comparison - {self.current_index + 1}/{self.total_comparisons}")
 
     def load_next_image_set(self):
         if not self.folder_images:  # Check if there are any folders with images
             self.show_results()
             return
 
-        max_images = max(len(images) for images in self.folder_images.values())
-        if self.current_index >= max_images:
+        if self.current_index >= self.total_comparisons:
             self.show_results()
             return
 
@@ -177,6 +183,8 @@ class SimultaneousComparisonTool:
 
         if not any(image_path for _, image_path in self.current_image_set):
             self.show_results()  # If no valid images in this set, show results
+        else:
+            self.update_title()  # Update the title with the new counter
 
     def display_current_set(self):
         self.canvas.delete("all")
@@ -249,6 +257,7 @@ class SimultaneousComparisonTool:
     def vote(self, chosen_folder):
         self.votes[chosen_folder] += 1
         self.current_index += 1
+        self.update_title()  # Update the title after voting
         self.load_next_image_set()
         self.display_current_set()
 
