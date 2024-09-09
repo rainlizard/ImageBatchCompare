@@ -6,30 +6,30 @@ from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 import sys
 
-class SimultaneousComparisonTool:
+class ImageComparisonTool:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("Multi-Folder Image Comparison")
+        self.root.title("Image Comparison Tool")
         self.root.geometry("1280x720")
         
-        # Get screen resolution
         self.screen_width = self.root.winfo_screenwidth()
         self.screen_height = self.root.winfo_screenheight()
-        
-        # Calculate base font size
         self.base_font_size = min(self.screen_width // 100, self.screen_height // 100)
         
-        # Set initial DPI awareness
         self.set_dpi_awareness(True)
         
         self.folders = []
         self.folder_images = {}
         self.current_images = []
-        self.votes = {}
         self.current_index = 0
         self.resize_timer = None
-        self.current_image_set = []
-        self.total_comparisons = 0  # New variable to store total number of comparisons
+        self.total_comparisons = 0
+        self.comparisons_made = 0
+        
+        self.current_pool = []
+        self.current_comparison = None
+        self.choice_made = None
+        self.folder_scores = {}
         
         self.setup_ui()
 
@@ -44,7 +44,6 @@ class SimultaneousComparisonTool:
             except:
                 pass
         elif sys.platform.startswith('linux'):
-            # For Linux, we can adjust the scaling factor of the root window
             scale = self.root.winfo_fpixels('1i') / 72.0 if aware else 1.0
             self.root.tk.call('tk', 'scaling', scale)
 
@@ -64,7 +63,6 @@ class SimultaneousComparisonTool:
         self.control_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=10)
         self.control_frame.columnconfigure(1, weight=1)
 
-        # Configure button style
         button_style = ttk.Style()
         button_style.configure('Large.TButton', padding=(self.get_font_size(1.0), self.get_font_size(1.0)), font=('Helvetica', self.get_font_size(1)))
 
@@ -78,18 +76,11 @@ class SimultaneousComparisonTool:
         self.tree_frame.grid_columnconfigure(0, weight=1)
         self.tree_frame.grid_rowconfigure(0, weight=1)
 
-        # Configure Treeview style
         style = ttk.Style()
         font_size = self.get_font_size(0.8)
-        
         style.configure("Treeview", font=('Helvetica', font_size))
         style.configure("Treeview.Heading", font=('Helvetica', self.get_font_size(0.9), "bold"))
-
-        # Calculate row height based on font size
-        row_height = font_size * 2  # Adjust this multiplier as needed
-
-        # Configure row height and padding
-        style.configure("Treeview", rowheight=row_height)
+        style.configure("Treeview", rowheight=font_size * 2)
 
         self.folder_tree = ttk.Treeview(self.tree_frame, columns=("path",), show="headings", style="Treeview")
         self.folder_tree.heading("path", text="Folder Paths")
@@ -114,11 +105,8 @@ class SimultaneousComparisonTool:
         folder = filedialog.askdirectory()
         if folder and folder not in self.folders:
             self.folders.append(folder)
-            self.votes[folder] = 0
-            
             images = [f for f in os.listdir(folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
             self.folder_images[folder] = sorted(images, key=lambda x: os.path.getmtime(os.path.join(folder, x)))
-
             self.folder_tree.insert("", "end", values=(folder,))
 
     def remove_folder(self):
@@ -127,7 +115,6 @@ class SimultaneousComparisonTool:
             folder = self.folder_tree.item(selected_item)['values'][0]
             if folder in self.folders:
                 self.folders.remove(folder)
-                del self.votes[folder]
                 del self.folder_images[folder]
                 self.folder_tree.delete(selected_item)
 
@@ -136,141 +123,134 @@ class SimultaneousComparisonTool:
             messagebox.showwarning("Warning", "Please add at least two folders for comparison.")
             return
         
-        # Disable DPI awareness when starting comparison
         self.set_dpi_awareness(False)
-        
         self.main_frame.grid_remove()
         self.image_frame.grid()
         self.current_index = 0
-        self.total_comparisons = max(len(images) for images in self.folder_images.values())
-        self.update_title()  # Update the title with the initial counter
-        self.load_next_image_set()
-        self.display_current_set()
+        self.comparisons_made = 0
+        self.folder_scores = {folder: 0 for folder in self.folders}
+        self.total_comparisons = min(len(images) for images in self.folder_images.values())
+        self.update_title()
+        self.load_next_image_pool()
 
     def stop_comparison(self):
-        # Re-enable DPI awareness when stopping comparison
         self.set_dpi_awareness(True)
-        
         self.image_frame.grid_remove()
         self.main_frame.grid()
         self.current_index = 0
-        self.votes = {folder: 0 for folder in self.folders}
-        self.current_image_set = []
-        self.root.title("Multi-Folder Image Comparison")  # Reset the title
+        self.root.title("Image Comparison Tool")
 
     def update_title(self):
-        self.root.title(f"Multi-Folder Image Comparison - {self.current_index + 1}/{self.total_comparisons}")
+        self.root.title(f"Image Comparison - Progress: {self.current_index}/{self.total_comparisons}")
 
-    def load_next_image_set(self):
-        if not self.folder_images:  # Check if there are any folders with images
-            self.show_results()
-            return
-
+    def load_next_image_pool(self):
         if self.current_index >= self.total_comparisons:
             self.show_results()
             return
 
-        self.current_image_set = []
-        random_folders = random.sample(self.folders, len(self.folders))
+        self.current_pool = []
+        for folder in self.folders:
+            image_name = self.folder_images[folder][self.current_index]
+            image_path = os.path.join(folder, image_name)
+            self.current_pool.append((folder, image_path))
 
-        for folder in random_folders:
-            if self.current_index < len(self.folder_images[folder]):
-                image_name = self.folder_images[folder][self.current_index]
-                image_path = os.path.join(folder, image_name)
-                self.current_image_set.append((folder, image_path))
-            else:
-                self.current_image_set.append((folder, None))
+        self.compare_image_pool()
 
-        if not any(image_path for _, image_path in self.current_image_set):
-            self.show_results()  # If no valid images in this set, show results
-        else:
-            self.update_title()  # Update the title with the new counter
+    def compare_image_pool(self):
+        pool_size = len(self.current_pool)
+        comparison_results = {folder: 0 for folder, _ in self.current_pool}
 
-    def display_current_set(self):
+        for i in range(pool_size):
+            for j in range(i + 1, pool_size):
+                self.current_comparison = [self.current_pool[i], self.current_pool[j]]
+                random.shuffle(self.current_comparison)
+                self.display_comparison()
+                user_choice = self.wait_for_user_choice()
+
+                winner = self.current_comparison[0 if user_choice == "left" else 1]
+                comparison_results[winner[0]] += 1
+
+        # Sort the pool based on comparison results
+        sorted_pool = sorted(self.current_pool, key=lambda x: comparison_results[x[0]], reverse=True)
+
+        # Assign points and update scores
+        for rank, (folder, _) in enumerate(sorted_pool):
+            points = max(pool_size - rank - 1, 0)  # Subtract 1 from previous formula, ensure minimum is 0
+            self.folder_scores[folder] += points
+
+        self.current_index += 1
+        self.update_title()
+        self.load_next_image_pool()
+
+    def display_comparison(self):
+        if self.current_comparison is None:
+            return
+
         self.canvas.delete("all")
         self.current_images = []
 
         window_width = self.canvas.winfo_width()
         window_height = self.canvas.winfo_height()
-        num_images = len(self.current_image_set)
         
-        if num_images == 0:
-            # Display a message when there are no images
-            self.canvas.create_text(window_width // 2, window_height // 2,
-                                    text="No images to display", anchor=tk.CENTER,
-                                    font=('Helvetica', self.get_font_size(1)))
-            return
+        for i, (folder, image_path) in enumerate(self.current_comparison):
+            try:
+                with Image.open(image_path) as pil_img:
+                    if pil_img.mode != 'RGB':
+                        pil_img = pil_img.convert('RGB')
+                    
+                    img_width, img_height = pil_img.size
+                    aspect_ratio = img_width / img_height
 
-        cols = min(3, num_images)  # Maximum of 3 columns
-        rows = math.ceil(num_images / cols)
-        
-        cell_width = window_width // cols
-        cell_height = window_height // rows
+                    new_width = window_width // 2
+                    new_height = int(new_width / aspect_ratio)
 
-        for i, (folder, image_path) in enumerate(self.current_image_set):
-            row = i // cols
-            col = i % cols
-            
-            if image_path:
-                try:
-                    with Image.open(image_path) as pil_img:
-                        if pil_img.mode != 'RGB':
-                            pil_img = pil_img.convert('RGB')
-                        
-                        img_width, img_height = pil_img.size
-                        aspect_ratio = img_width / img_height
+                    if new_height > window_height:
+                        new_height = window_height
+                        new_width = int(new_height * aspect_ratio)
 
-                        if aspect_ratio > cell_width / cell_height:
-                            new_width = cell_width
-                            new_height = int(cell_width / aspect_ratio)
-                        else:
-                            new_height = cell_height
-                            new_width = int(cell_height * aspect_ratio)
-
-                        pil_img = pil_img.resize((new_width, new_height), Image.LANCZOS)
-                        
-                        img = ImageTk.PhotoImage(pil_img)
-                        x = col * cell_width + (cell_width - new_width) // 2
-                        y = row * cell_height + (cell_height - new_height) // 2
-                        image_item = self.canvas.create_image(x, y, anchor=tk.NW, image=img)
-                        self.canvas.tag_bind(image_item, "<Button-1>", lambda e, f=folder: self.vote(f))
-                        self.current_images.append((img, image_item))
-                except Exception as e:
-                    print(f"Error loading image {image_path}: {e}")
-                    self.canvas.create_text(col * cell_width + cell_width // 2, 
-                                            row * cell_height + cell_height // 2,
-                                            text="Error loading image", anchor=tk.CENTER,
-                                            font=('Helvetica', self.get_font_size(0.8)))
-            else:
-                self.canvas.create_text(col * cell_width + cell_width // 2, 
-                                        row * cell_height + cell_height // 2,
-                                        text="No image", anchor=tk.CENTER,
+                    pil_img = pil_img.resize((new_width, new_height), Image.LANCZOS)
+                    
+                    img = ImageTk.PhotoImage(pil_img)
+                    x = i * (window_width // 2) + (window_width // 4 - new_width // 2)
+                    y = (window_height - new_height) // 2
+                    image_item = self.canvas.create_image(x, y, anchor=tk.NW, image=img)
+                    self.canvas.tag_bind(image_item, "<Button-1>", lambda e, side=("left" if i == 0 else "right"): self.make_choice(side))
+                    self.current_images.append((img, image_item))
+            except Exception as e:
+                print(f"Error loading image {image_path}: {e}")
+                self.canvas.create_text(i * (window_width // 2) + (window_width // 4), 
+                                        window_height // 2,
+                                        text="Error loading image", anchor=tk.CENTER,
                                         font=('Helvetica', self.get_font_size(0.8)))
 
         self.root.update_idletasks()
 
+    def make_choice(self, choice):
+        self.user_choice = choice
+        if self.choice_made:
+            self.choice_made.set(True)
+
+    def wait_for_user_choice(self):
+        self.user_choice = None
+        self.choice_made = tk.BooleanVar(value=False)
+        self.root.wait_variable(self.choice_made)
+        return self.user_choice
+
+    def show_results(self):
+        result = "Final scores:\n"
+        for folder, score in sorted(self.folder_scores.items(), key=lambda x: x[1], reverse=True):
+            result += f"{os.path.basename(folder)}: {score} points\n"
+        messagebox.showinfo("Comparison Complete", result)
+        self.stop_comparison()
+
     def on_window_resize(self, event):
         if self.resize_timer is not None:
             self.root.after_cancel(self.resize_timer)
-        self.resize_timer = self.root.after(200, self.display_current_set)
-
-    def vote(self, chosen_folder):
-        self.votes[chosen_folder] += 1
-        self.current_index += 1
-        self.update_title()  # Update the title after voting
-        self.load_next_image_set()
-        self.display_current_set()
-
-    def show_results(self):
-        result = "Results:\n"
-        for folder, votes in self.votes.items():
-            result += f"{os.path.basename(folder)}: {votes} votes\n"
-        messagebox.showinfo("Comparison Complete", result)
-        self.stop_comparison()
+        self.resize_timer = self.root.after(200, self.display_comparison)
 
     def run(self):
         self.root.mainloop()
 
 if __name__ == "__main__":
-    tool = SimultaneousComparisonTool()
+    tool = ImageComparisonTool()
     tool.run()
