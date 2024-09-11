@@ -5,12 +5,13 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 import sys
+import json
 
 class SimultaneousComparisonTool:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Multi-Folder Image Comparison")
-        self.root.geometry("1280x720")
+        self.root.geometry("1440x720")
         
         # Get screen resolution
         self.screen_width = self.root.winfo_screenwidth()
@@ -37,6 +38,9 @@ class SimultaneousComparisonTool:
         self.group_winner = None
         self.current_index = 0
         self.winner_position = None
+        
+        self.config_file = "image-batch-compare.json"
+        self.load_config()
         
         self.setup_ui()
 
@@ -117,6 +121,25 @@ class SimultaneousComparisonTool:
         self.root.bind("<Configure>", self.on_window_resize)
         self.root.bind("<Escape>", lambda e: self.stop_comparison())
 
+        # Populate the Treeview with folders from config
+        for folder in self.folders:
+            self.folder_tree.insert("", "end", values=(folder,))
+
+    def load_config(self):
+        if os.path.exists(self.config_file):
+            with open(self.config_file, 'r') as f:
+                config = json.load(f)
+                self.folders = config.get('folders', [])
+                for folder in self.folders:
+                    self.votes[folder] = 0
+                    images = [f for f in os.listdir(folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
+                    self.folder_images[folder] = sorted(images, key=lambda x: os.path.getmtime(os.path.join(folder, x)))
+
+    def save_config(self):
+        config = {'folders': self.folders}
+        with open(self.config_file, 'w') as f:
+            json.dump(config, f)
+
     def add_folder(self):
         folder = filedialog.askdirectory()
         if folder and folder not in self.folders:
@@ -127,6 +150,7 @@ class SimultaneousComparisonTool:
             self.folder_images[folder] = sorted(images, key=lambda x: os.path.getmtime(os.path.join(folder, x)))
 
             self.folder_tree.insert("", "end", values=(folder,))
+            self.save_config()
 
     def remove_folder(self):
         selected_item = self.folder_tree.selection()
@@ -137,6 +161,7 @@ class SimultaneousComparisonTool:
                 del self.votes[folder]
                 del self.folder_images[folder]
                 self.folder_tree.delete(selected_item)
+                self.save_config()
 
     def calculate_total_screens(self):
         num_folders = len(self.folders)
