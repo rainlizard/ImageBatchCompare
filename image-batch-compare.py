@@ -42,6 +42,8 @@ class SimultaneousComparisonTool:
         self.config_file = "image-batch-compare.json"
         self.load_config()
         
+        self.root.bind("<BackSpace>", self.skip_current_selection)
+        
         self.setup_ui()
 
     def set_dpi_awareness(self, aware):
@@ -129,14 +131,21 @@ class SimultaneousComparisonTool:
         if os.path.exists(self.config_file):
             with open(self.config_file, 'r') as f:
                 config = json.load(f)
-                self.folders = config.get('folders', [])
-                for folder in self.folders:
-                    self.votes[folder] = 0
-                    images = [f for f in os.listdir(folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
-                    self.folder_images[folder] = sorted(images, key=lambda x: os.path.getmtime(os.path.join(folder, x)))
+                self.folders = []
+                for folder in config.get('folders', []):
+                    if os.path.exists(folder):
+                        self.folders.append(folder)
+                        self.votes[folder] = 0
+                        images = [f for f in os.listdir(folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
+                        self.folder_images[folder] = sorted(images, key=lambda x: os.path.getmtime(os.path.join(folder, x)))
+                    else:
+                        print(f"Warning: Folder '{folder}' not found. Skipping.")
+            
+            if not self.folders:
+                print("No valid folders found in the configuration.")
 
     def save_config(self):
-        config = {'folders': self.folders}
+        config = {'folders': [folder for folder in self.folders if os.path.exists(folder)]}
         with open(self.config_file, 'w') as f:
             json.dump(config, f)
 
@@ -146,9 +155,6 @@ class SimultaneousComparisonTool:
             self.folders.append(folder)
             self.votes[folder] = 0
             
-            images = [f for f in os.listdir(folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
-            self.folder_images[folder] = sorted(images, key=lambda x: os.path.getmtime(os.path.join(folder, x)))
-
             self.folder_tree.insert("", "end", values=(folder,))
             self.save_config()
 
@@ -179,12 +185,19 @@ class SimultaneousComparisonTool:
         
         self.set_dpi_awareness(False)
         
+        # Load images for all folders here
+        for folder in self.folders:
+            images = [f for f in os.listdir(folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
+            self.folder_images[folder] = sorted(images, key=lambda x: os.path.getmtime(os.path.join(folder, x)))
+        
         self.main_frame.grid_remove()
         self.image_frame.grid()
         self.current_index = 0
-        self.current_screen = 0
+        self.current_screen = 0  # Initialize to 0 instead of 1
         self.total_comparisons = max(len(images) for images in self.folder_images.values())
         self.total_screens = self.calculate_total_screens()
+        
+        self.root.bind("<BackSpace>", self.skip_current_selection)
         
         self.load_next_group()
 
@@ -202,6 +215,21 @@ class SimultaneousComparisonTool:
         self.group_winner = None
         self.winner_position = None
         self.root.title("Multi-Folder Image Comparison")
+        
+        self.root.unbind("<BackSpace>")
+
+    def skip_current_selection(self, event):
+        self.current_index += 1
+        self.group_winner = None
+        self.screen_winner = None
+        self.winner_position = None
+        
+        # Calculate how many screens we're skipping
+        num_folders = len(self.folders)
+        screens_per_group = 1 if num_folders <= 4 else ((num_folders - 2) // 3) + 1
+        self.current_screen += screens_per_group
+        
+        self.load_next_group()
 
     def load_next_group(self):
         if not self.folder_images:
@@ -222,6 +250,12 @@ class SimultaneousComparisonTool:
         self.group_winner = None
         self.screen_winner = None
         self.winner_position = None
+        
+        # Reset current_screen to the start of this group
+        num_folders = len(self.folders)
+        screens_per_group = 1 if num_folders <= 4 else ((num_folders - 2) // 3) + 1
+        self.current_screen = self.current_index * screens_per_group
+        
         self.load_next_screen()
 
     def load_next_screen(self):
@@ -232,7 +266,7 @@ class SimultaneousComparisonTool:
             self.load_next_group()
             return
 
-        self.current_screen += 1
+        self.current_screen += 1  # Increment here instead of in display_current_screen
         max_images = 2 if len(self.folders) == 2 else 4
         self.current_screen_images = [None] * max_images
         if self.screen_winner and self.winner_position is not None:
