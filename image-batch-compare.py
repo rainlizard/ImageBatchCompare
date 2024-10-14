@@ -29,13 +29,14 @@ class ImageBatchCompare:
         self.votes = {}
         self.resize_timer = None
         self.total_comparisons = 0
-        self.total_screens = 0
-        self.current_screen = 0
+        self.current_comparison = 0
+        self.comparisons_within_group = 0
         
+        self.current_group_index = 0
         self.current_group = []
+        self.group_winner = None
         self.current_screen_images = []
         self.screen_winner = None
-        self.group_winner = None
         self.current_index = 0
         self.winner_position = None
         
@@ -43,8 +44,42 @@ class ImageBatchCompare:
         self.load_config()
         
         self.root.bind("<BackSpace>", self.skip_current_selection)
-        
+
+        self.current_image = None
+        self.left_image = None
+        self.right_image = None
+
+        self.group_comparisons = 0
+
+        self.click_start_x = None
+        self.click_start_y = None
+
+        self.click_disabled = False
+        self.click_disable_timer = None
+
         self.setup_ui()
+
+        self.canvas.bind("<Motion>", self.on_mouse_move)
+        self.canvas.bind("<ButtonPress-1>", self.on_mouse_press)
+        self.canvas.bind("<ButtonRelease-1>", self.on_mouse_release)
+        # Remove the existing binding for "<Button-1>"
+        # self.canvas.bind("<Button-1>", self.handle_click)
+
+        self.reset_comparison_state()
+
+        self.root.bind("<Configure>", self.on_window_configure)
+
+    def reset_comparison_state(self):
+        self.current_group_index = 0
+        self.current_group = []
+        self.group_winner = None
+        self.current_screen_images = []
+        self.screen_winner = None
+        self.current_index = 0
+        self.winner_position = None
+        self.comparisons_within_group = 0
+        self.current_comparison = 0
+        self.votes = {folder: 0 for folder in self.folders}
 
     def set_dpi_awareness(self, aware):
         if sys.platform.startswith('win'):
@@ -121,7 +156,7 @@ class ImageBatchCompare:
         self.canvas = tk.Canvas(self.image_frame)
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
-        self.root.bind("<Configure>", self.on_window_resize)
+        self.root.bind("<Configure>", self.on_window_configure)
         self.root.bind("<Escape>", lambda e: self.stop_comparison())
 
         # Populate the Treeview with folders from config
@@ -182,15 +217,6 @@ class ImageBatchCompare:
                     self.folder_tree.insert("", "end", values=(folder,))
             self.save_config()
 
-    def calculate_total_screens(self):
-        num_folders = len(self.folders)
-        if num_folders <= 4:
-            return self.total_comparisons
-        else:
-            # Calculate the group number (1-based)
-            group = (num_folders - 2) // 3
-            return self.total_comparisons * (group + 1)
-
     def start_comparison(self):
         if len(self.folders) < 2:
             messagebox.showwarning("Warning", "Please add at least two folders for comparison.")
@@ -212,14 +238,23 @@ class ImageBatchCompare:
         
         self.main_frame.grid_remove()
         self.image_frame.grid()
-        self.current_index = 0
-        self.current_screen = 0
-        self.total_comparisons = max(len(images) for images in self.folder_images.values())
-        self.total_screens = self.calculate_total_screens()
+        self.reset_comparison_state()
+        self.total_comparisons = self.calculate_total_comparisons()
         
         self.root.bind("<BackSpace>", self.skip_current_selection)
         
         self.load_next_group()
+
+    def calculate_total_comparisons(self):
+        total = 0
+        for i in range(max(len(images) for images in self.folder_images.values())):
+            num_images_in_group = sum(1 for folder in self.folders if i < len(self.folder_images[folder]))
+            if num_images_in_group > 1:
+                total += num_images_in_group - 1  # Each group will have (n-1) comparisons
+        return total
+
+    def update_title(self):
+        self.root.title(f"Image Batch Compare - Comparison {self.current_comparison + 1}/{self.total_comparisons}")
 
     def stop_comparison(self):
         self.set_dpi_awareness(True)
@@ -229,92 +264,63 @@ class ImageBatchCompare:
         
         self.image_frame.grid_remove()
         self.main_frame.grid()
-        self.current_index = 0
-        self.current_screen = 0
-        self.votes = {folder: 0 for folder in self.folders}
-        self.current_group = []
-        self.current_screen_images = []
-        self.screen_winner = None
-        self.group_winner = None
-        self.winner_position = None
+        self.reset_comparison_state()
         self.root.title("Image Batch Compare")
         
         self.root.unbind("<BackSpace>")
 
     def skip_current_selection(self, event):
-        self.current_index += 1
-        self.group_winner = None
-        self.screen_winner = None
-        self.winner_position = None
-        
-        # Calculate how many screens we're skipping
-        num_folders = len(self.folders)
-        screens_per_group = 1 if num_folders <= 4 else ((num_folders - 2) // 3) + 1
-        self.current_screen += screens_per_group
-        
+        remaining_in_group = (len(self.folders) * (len(self.folders) - 1)) // 2 - self.comparisons_within_group
+        self.current_comparison += remaining_in_group
+        self.current_group_index += 1
         self.load_next_group()
 
     def load_next_group(self):
-        if not self.folder_images:
-            self.show_results()
-            return
-
-        if self.current_index >= self.total_comparisons:
+        print(f"Loading next group. Current group index: {self.current_group_index}")
+        if self.current_group_index >= max(len(images) for images in self.folder_images.values()):
             self.show_results()
             return
 
         self.current_group = []
         for folder in self.folders:
-            if self.current_index < len(self.folder_images[folder]):
-                image_name = self.folder_images[folder][self.current_index]
+            if self.current_group_index < len(self.folder_images[folder]):
+                image_name = self.folder_images[folder][self.current_group_index]
                 image_path = os.path.join(folder, image_name)
                 self.current_group.append((folder, image_path))
 
+        print(f"New group size: {len(self.current_group)}")
+
+        # Shuffle the current group
+        random.shuffle(self.current_group)
+
         self.group_winner = None
-        self.screen_winner = None
-        self.winner_position = None
+        self.current_pair_index = 0
+        self.comparisons_within_group = 0
         
-        # Reset current_screen to the start of this group
-        num_folders = len(self.folders)
-        screens_per_group = 1 if num_folders <= 4 else ((num_folders - 2) // 3) + 1
-        self.current_screen = self.current_index * screens_per_group
-        
-        self.load_next_screen()
+        if len(self.current_group) > 1:
+            self.load_next_screen()
+        else:
+            self.current_group_index += 1
+            self.load_next_group()
 
     def load_next_screen(self):
-        if not self.current_group:
-            if self.group_winner:
-                self.votes[self.group_winner[0]] += 1
-            self.current_index += 1
+        if self.group_winner is None:
+            # First comparison in the group
+            self.current_pair = self.current_group[:2]
+        elif self.current_pair_index < len(self.current_group) - 1:
+            # Compare the winner with the next image
+            self.current_pair = [self.group_winner, self.current_group[self.current_pair_index + 1]]
+        else:
+            # We've compared all images in this group
+            self.votes[self.group_winner[0]] += 1
+            print(f"Added vote for group winner: {self.group_winner[0]}")
+            self.current_group_index += 1
             self.load_next_group()
             return
 
-        self.current_screen += 1  # Increment here instead of in display_current_screen
-        max_images = 2 if len(self.folders) == 2 else 4
-        self.current_screen_images = [None] * max_images
-        if self.screen_winner and self.winner_position is not None:
-            self.current_screen_images[self.winner_position] = self.screen_winner
-
-        available_positions = [i for i in range(max_images) if self.current_screen_images[i] is None]
-        num_to_select = min(len(available_positions), len(self.current_group))
-        selected_images = random.sample(self.current_group, num_to_select)
-
-        for img, pos in zip(selected_images, available_positions):
-            self.current_screen_images[pos] = img
-            self.current_group.remove(img)
-
-        # Ensure the winner stays in its position even if there are fewer than max_images
-        self.current_screen_images = [img for img in self.current_screen_images if img is not None]
-        if self.screen_winner and len(self.current_screen_images) < max_images:
-            full_screen = [None] * max_images
-            full_screen[self.winner_position] = self.screen_winner
-            for img in self.current_screen_images:
-                if img != self.screen_winner:
-                    empty_pos = next(i for i, x in enumerate(full_screen) if x is None)
-                    full_screen[empty_pos] = img
-            self.current_screen_images = full_screen
-
+        self.current_screen_images = self.current_pair
         self.display_current_screen()
+        self.update_title()
 
     def display_current_screen(self):
         self.canvas.delete("all")
@@ -323,23 +329,9 @@ class ImageBatchCompare:
         window_width = self.canvas.winfo_width()
         window_height = self.canvas.winfo_height()
         
-        if len(self.folders) == 2:
-            grid_size = (1, 2)  # 2x1 grid
-            cell_width = window_width // 2
-            cell_height = window_height
-        else:
-            grid_size = (2, 2)  # 2x2 grid
-            cell_width = window_width // 2
-            cell_height = window_height // 2
-
         for i, image_data in enumerate(self.current_screen_images):
             if image_data is not None:
                 folder, image_path = image_data
-                
-                if len(self.folders) == 2:
-                    row, col = 0, i
-                else:
-                    row, col = divmod(i, 2)
                 
                 try:
                     with Image.open(image_path) as pil_img:
@@ -349,60 +341,140 @@ class ImageBatchCompare:
                         img_width, img_height = pil_img.size
                         aspect_ratio = img_width / img_height
 
-                        if aspect_ratio > cell_width / cell_height:
-                            new_width = cell_width
-                            new_height = max(1, int(cell_width / aspect_ratio))
+                        if aspect_ratio > window_width / window_height:
+                            new_width = window_width
+                            new_height = max(1, int(window_width / aspect_ratio))
                         else:
-                            new_height = cell_height
-                            new_width = max(1, int(cell_height * aspect_ratio))
+                            new_height = window_height
+                            new_width = max(1, int(window_height * aspect_ratio))
 
                         pil_img = pil_img.resize((new_width, new_height), Image.LANCZOS)
                         
                         img = ImageTk.PhotoImage(pil_img)
                         
-                        if len(self.folders) == 2:
-                            # For 2x1 grid, center the images
-                            x = col * cell_width + (cell_width - new_width) // 2
+                        # Store the images
+                        if i == 0:
+                            self.left_image = (img, folder, image_path)
                         else:
-                            # For 2x2 grid, align left images to right, right images to left
-                            if col == 0:  # Left column
-                                x = cell_width - new_width
-                            else:  # Right column
-                                x = cell_width
+                            self.right_image = (img, folder, image_path)
                         
-                        y = row * cell_height + (cell_height - new_height) // 2
-                        
-                        image_item = self.canvas.create_image(x, y, anchor=tk.NW, image=img)
-                        self.canvas.tag_bind(image_item, "<Button-1>", lambda e, f=folder, ip=image_path, pos=i: self.vote(f, ip, pos))
-                        self.current_images.append((img, image_item))
                 except Exception as e:
-                    pass
+                    print(f"Error loading image: {e}")
+
+        # Initially display the left image
+        self.display_image(self.left_image)
 
         self.update_title()
         self.root.update_idletasks()
 
-    def vote(self, chosen_folder, chosen_image_path, position):
-        self.screen_winner = (chosen_folder, chosen_image_path)
-        self.group_winner = (chosen_folder, chosen_image_path)
-        self.winner_position = position
+    def display_image(self, image_data):
+        if image_data:
+            img, folder, image_path = image_data
+            window_width = self.canvas.winfo_width()
+            window_height = self.canvas.winfo_height()
+            
+            x = (window_width - img.width()) // 2
+            y = (window_height - img.height()) // 2
+            
+            self.canvas.delete("all")
+            self.current_image = self.canvas.create_image(x, y, anchor=tk.NW, image=img)
 
-        if self.current_group:
-            self.load_next_screen()
+    def on_mouse_press(self, event):
+        self.click_start_x = event.x
+        self.click_start_y = event.y
+
+    def on_mouse_release(self, event):
+        if self.click_disabled:
+            return
+        
+        if self.click_start_x is not None and self.click_start_y is not None:
+            # Check if both press and release occurred within the canvas
+            if (0 <= self.click_start_x < self.canvas.winfo_width() and
+                0 <= self.click_start_y < self.canvas.winfo_height() and
+                0 <= event.x < self.canvas.winfo_width() and
+                0 <= event.y < self.canvas.winfo_height()):
+                self.handle_click(event)
+        
+        # Reset the click start coordinates
+        self.click_start_x = None
+        self.click_start_y = None
+
+    def handle_click(self, event):
+        window_width = self.canvas.winfo_width()
+        if event.x < window_width // 2:
+            chosen_image = self.left_image
         else:
-            self.votes[self.group_winner[0]] += 1
-            self.current_index += 1
-            self.group_winner = None
-            self.screen_winner = None
-            self.winner_position = None
+            chosen_image = self.right_image
+        
+        if chosen_image:
+            _, folder, image_path = chosen_image
+            self.vote(folder, image_path)
+
+    def vote(self, chosen_folder, chosen_image_path):
+        print(f"Vote called for folder: {chosen_folder}")
+        print(f"Before vote - Current votes: {self.votes}")
+        print(f"Current group index: {self.current_group_index}")
+        print(f"Current pair index: {self.current_pair_index}")
+        print(f"Group size: {len(self.current_group)}")
+
+        self.group_winner = (chosen_folder, chosen_image_path)
+        self.current_comparison += 1
+        self.current_pair_index += 1
+        self.comparisons_within_group += 1
+
+        if self.comparisons_within_group >= len(self.current_group) - 1:
+            # This was the last comparison in the group
+            self.votes[chosen_folder] += 1
+            print(f"Added vote for group winner: {chosen_folder}")
+            self.current_group_index += 1
             self.load_next_group()
+        else:
+            self.load_next_screen()
+
+        print(f"After vote - Current votes: {self.votes}")
+        print("--------------------")
+
+        # Refresh the current image based on mouse position
+        self.refresh_current_image()
+
+    def refresh_current_image(self):
+        mouse_x = self.root.winfo_pointerx() - self.root.winfo_rootx()
+        window_width = self.canvas.winfo_width()
+        if mouse_x < window_width // 2:
+            self.display_image(self.left_image)
+        else:
+            self.display_image(self.right_image)
+
+    def on_mouse_move(self, event):
+        window_width = self.canvas.winfo_width()
+        if event.x < window_width // 2:
+            if self.current_image != self.left_image:
+                self.canvas.delete("all")
+                self.display_image(self.left_image)
+        else:
+            if self.current_image != self.right_image:
+                self.canvas.delete("all")
+                self.display_image(self.right_image)
 
     def update_title(self):
-        self.root.title(f"Image Batch Compare - {self.current_screen}/{self.total_screens}")
+        self.root.title(f"Image Batch Compare - Comparison {self.current_comparison + 1}/{self.total_comparisons}")
 
-    def on_window_resize(self, event):
+    def on_window_configure(self, event):
+        # Cancel any existing timers
         if self.resize_timer is not None:
             self.root.after_cancel(self.resize_timer)
+        if self.click_disable_timer is not None:
+            self.root.after_cancel(self.click_disable_timer)
+        
+        # Disable clicks
+        self.click_disabled = True
+        
+        # Set timers
         self.resize_timer = self.root.after(200, self.display_current_screen)
+        self.click_disable_timer = self.root.after(100, self.enable_clicks)
+
+    def enable_clicks(self):
+        self.click_disabled = False
 
     def show_results(self):
         result = "Results:\n"
