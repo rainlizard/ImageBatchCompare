@@ -7,10 +7,10 @@ from PIL import Image, ImageTk
 import sys
 import json
 
-class SimultaneousComparisonTool:
+class ImageBatchCompare:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("Multi-Folder Image Comparison")
+        self.root.title("Image Batch Compare")
         self.root.geometry("1440x720")
         
         # Get screen resolution
@@ -82,9 +82,10 @@ class SimultaneousComparisonTool:
         button_style.configure('Large.TButton', padding=(self.get_font_size(1.0), self.get_font_size(1.0)), font=('Helvetica', self.get_font_size(1)))
 
         ttk.Button(self.control_frame, text="Add Folder", command=self.add_folder, style='Large.TButton').grid(row=0, column=0, padx=10, pady=10)
-        ttk.Button(self.control_frame, text="Remove Folder", command=self.remove_folder, style='Large.TButton').grid(row=0, column=1, padx=10, pady=10)
+        ttk.Button(self.control_frame, text="Add Subfolders", command=self.add_subfolders, style='Large.TButton').grid(row=0, column=1, padx=10, pady=10)
+        ttk.Button(self.control_frame, text="Remove Folder", command=self.remove_folder, style='Large.TButton').grid(row=0, column=2, padx=10, pady=10)
         self.start_button = ttk.Button(self.control_frame, text="Start Comparison", command=self.start_comparison, style='Large.TButton')
-        self.start_button.grid(row=0, column=2, padx=10, pady=10)
+        self.start_button.grid(row=0, column=3, padx=10, pady=10)
 
         self.tree_frame = ttk.Frame(self.main_frame)
         self.tree_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=10)
@@ -164,10 +165,22 @@ class SimultaneousComparisonTool:
             folder = self.folder_tree.item(selected_item)['values'][0]
             if folder in self.folders:
                 self.folders.remove(folder)
-                del self.votes[folder]
-                del self.folder_images[folder]
+                self.votes.pop(folder, None)
+                self.folder_images.pop(folder, None)  # Use pop with a default value
                 self.folder_tree.delete(selected_item)
                 self.save_config()
+
+    def add_subfolders(self):
+        root_folder = filedialog.askdirectory()
+        if root_folder:
+            subfolders = [os.path.join(root_folder, d) for d in os.listdir(root_folder) 
+                          if os.path.isdir(os.path.join(root_folder, d))]
+            for folder in subfolders:
+                if folder not in self.folders:
+                    self.folders.append(folder)
+                    self.votes[folder] = 0
+                    self.folder_tree.insert("", "end", values=(folder,))
+            self.save_config()
 
     def calculate_total_screens(self):
         num_folders = len(self.folders)
@@ -185,6 +198,13 @@ class SimultaneousComparisonTool:
         
         self.set_dpi_awareness(False)
         
+        # Maximize the window
+        self.root.state('zoomed')  # This works for Windows and some Linux environments
+        
+        # Use after method to delay the start of comparison
+        self.root.after(100, self._start_comparison_after_maximize)
+
+    def _start_comparison_after_maximize(self):
         # Load images for all folders here
         for folder in self.folders:
             images = [f for f in os.listdir(folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
@@ -193,7 +213,7 @@ class SimultaneousComparisonTool:
         self.main_frame.grid_remove()
         self.image_frame.grid()
         self.current_index = 0
-        self.current_screen = 0  # Initialize to 0 instead of 1
+        self.current_screen = 0
         self.total_comparisons = max(len(images) for images in self.folder_images.values())
         self.total_screens = self.calculate_total_screens()
         
@@ -203,6 +223,9 @@ class SimultaneousComparisonTool:
 
     def stop_comparison(self):
         self.set_dpi_awareness(True)
+        
+        # Restore the window to its original size
+        self.root.state('normal')
         
         self.image_frame.grid_remove()
         self.main_frame.grid()
@@ -214,7 +237,7 @@ class SimultaneousComparisonTool:
         self.screen_winner = None
         self.group_winner = None
         self.winner_position = None
-        self.root.title("Multi-Folder Image Comparison")
+        self.root.title("Image Batch Compare")
         
         self.root.unbind("<BackSpace>")
 
@@ -374,7 +397,7 @@ class SimultaneousComparisonTool:
             self.load_next_group()
 
     def update_title(self):
-        self.root.title(f"Multi-Folder Image Comparison - {self.current_screen}/{self.total_screens}")
+        self.root.title(f"Image Batch Compare - {self.current_screen}/{self.total_screens}")
 
     def on_window_resize(self, event):
         if self.resize_timer is not None:
@@ -392,5 +415,5 @@ class SimultaneousComparisonTool:
         self.root.mainloop()
 
 if __name__ == "__main__":
-    tool = SimultaneousComparisonTool()
+    tool = ImageBatchCompare()
     tool.run()
