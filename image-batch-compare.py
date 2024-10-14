@@ -57,6 +57,8 @@ class ImageBatchCompare:
         self.click_disabled = False
         self.click_disable_timer = None
 
+        self.last_chosen_side = None  # Add this line
+
         self.setup_ui()
 
         self.canvas.bind("<Motion>", self.on_mouse_move)
@@ -310,6 +312,10 @@ class ImageBatchCompare:
         elif self.current_pair_index < len(self.current_group) - 1:
             # Compare the winner with the next image
             self.current_pair = [self.group_winner, self.current_group[self.current_pair_index + 1]]
+            
+            # Place the winner on the opposite side of the last chosen side
+            if self.last_chosen_side == 'left':
+                self.current_pair = self.current_pair[::-1]  # Reverse the pair
         else:
             # We've compared all images in this group
             self.votes[self.group_winner[0]] += 1
@@ -403,8 +409,10 @@ class ImageBatchCompare:
         window_width = self.canvas.winfo_width()
         if event.x < window_width // 2:
             chosen_image = self.left_image
+            self.last_chosen_side = 'left'
         else:
             chosen_image = self.right_image
+            self.last_chosen_side = 'right'
         
         if chosen_image:
             _, folder, image_path = chosen_image
