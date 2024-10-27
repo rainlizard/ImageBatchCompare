@@ -256,7 +256,10 @@ class ImageBatchCompare:
         return total
 
     def update_title(self):
-        self.root.title(f"Image Batch Compare - Comparison {self.current_comparison + 1}/{self.total_comparisons}")
+        if self.image_frame.winfo_viewable():  # Only show comparison number if we're in comparison mode
+            self.root.title(f"Image Batch Compare - Comparison {self.current_comparison + 1}/{self.total_comparisons}")
+        else:
+            self.root.title("Image Batch Compare")
 
     def stop_comparison(self):
         self.set_dpi_awareness(True)
@@ -465,7 +468,10 @@ class ImageBatchCompare:
                 self.display_image(self.right_image)
 
     def update_title(self):
-        self.root.title(f"Image Batch Compare - Comparison {self.current_comparison + 1}/{self.total_comparisons}")
+        if self.image_frame.winfo_viewable():  # Only show comparison number if we're in comparison mode
+            self.root.title(f"Image Batch Compare - Comparison {self.current_comparison + 1}/{self.total_comparisons}")
+        else:
+            self.root.title("Image Batch Compare")
 
     def on_window_configure(self, event):
         # Cancel any existing timers
