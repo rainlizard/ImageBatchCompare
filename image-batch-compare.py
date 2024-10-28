@@ -13,15 +13,18 @@ class ImageBatchCompare:
         self.root.title("Image Batch Compare")
         self.root.geometry("1440x720")
         
+        # Reintroduce the call to set_dpi_awareness
+        self.set_dpi_awareness()
+
+        # Get the DPI scaling factor
+        dpi_scaling = self.root.tk.call('tk', 'scaling')
+
         # Get screen resolution
-        self.screen_width = self.root.winfo_screenwidth()
-        self.screen_height = self.root.winfo_screenheight()
-        
-        # Calculate base font size
-        self.base_font_size = min(self.screen_width // 100, self.screen_height // 100)
-        
-        # Set initial DPI awareness
-        self.set_dpi_awareness(True)
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        # Calculate base font size based on DPI scaling and screen resolution
+        self.base_font_size = self.calculate_base_font_size(screen_width, screen_height)
         
         self.folders = []
         self.folder_images = {}
@@ -71,35 +74,14 @@ class ImageBatchCompare:
 
         self.root.bind("<Configure>", self.on_window_configure)
 
-    def reset_comparison_state(self):
-        self.current_group_index = 0
-        self.current_group = []
-        self.group_winner = None
-        self.current_screen_images = []
-        self.screen_winner = None
-        self.current_index = 0
-        self.winner_position = None
-        self.comparisons_within_group = 0
-        self.current_comparison = 0
-        self.votes = {folder: 0 for folder in self.folders}
-
-    def set_dpi_awareness(self, aware):
-        if sys.platform.startswith('win'):
-            try:
-                import ctypes
-                if aware:
-                    ctypes.windll.shcore.SetProcessDpiAwareness(1)
-                else:
-                    ctypes.windll.shcore.SetProcessDpiAwareness(0)
-            except:
-                pass
-        elif sys.platform.startswith('linux'):
-            # For Linux, we can adjust the scaling factor of the root window
-            scale = self.root.winfo_fpixels('1i') / 72.0 if aware else 1.0
-            self.root.tk.call('tk', 'scaling', scale)
+    def calculate_base_font_size(self, screen_width, screen_height):
+        # Base font size calculation based on screen resolution
+        # You can adjust the logic here to fit your needs
+        base_size = 32  # Default base size
+        return int(base_size)
 
     def get_font_size(self, size_factor):
-        return int(self.base_font_size * size_factor * 4)
+        return int(self.base_font_size * size_factor)
 
     def setup_ui(self):
         self.root.grid_columnconfigure(0, weight=1)
@@ -114,15 +96,15 @@ class ImageBatchCompare:
         self.control_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=10)
         self.control_frame.columnconfigure(1, weight=1)
 
-        # Configure button style
+        # Configure button style with reduced size
         button_style = ttk.Style()
-        button_style.configure('Large.TButton', padding=(self.get_font_size(1.0), self.get_font_size(1.0)), font=('Helvetica', self.get_font_size(1)))
+        button_style.configure('Small.TButton', padding=(self.get_font_size(0.5), self.get_font_size(0.5)), font=('Helvetica', self.get_font_size(0.8)))
 
-        ttk.Button(self.control_frame, text="Add Folder", command=self.add_folder, style='Large.TButton').grid(row=0, column=0, padx=10, pady=10)
-        ttk.Button(self.control_frame, text="Add Subfolders", command=self.add_subfolders, style='Large.TButton').grid(row=0, column=1, padx=10, pady=10)
-        ttk.Button(self.control_frame, text="Remove Folder", command=self.remove_folder, style='Large.TButton').grid(row=0, column=2, padx=10, pady=10)
-        self.start_button = ttk.Button(self.control_frame, text="Start Comparison", command=self.start_comparison, style='Large.TButton')
-        self.start_button.grid(row=0, column=3, padx=10, pady=10)
+        ttk.Button(self.control_frame, text="Add Folder", command=self.add_folder, style='Small.TButton').grid(row=0, column=0, padx=5, pady=5)
+        ttk.Button(self.control_frame, text="Add Subfolders", command=self.add_subfolders, style='Small.TButton').grid(row=0, column=1, padx=5, pady=5)
+        ttk.Button(self.control_frame, text="Remove Folder", command=self.remove_folder, style='Small.TButton').grid(row=0, column=2, padx=5, pady=5)
+        self.start_button = ttk.Button(self.control_frame, text="Start Comparison", command=self.start_comparison, style='Small.TButton')
+        self.start_button.grid(row=0, column=3, padx=5, pady=5)
 
         self.tree_frame = ttk.Frame(self.main_frame)
         self.tree_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=10)
@@ -224,8 +206,6 @@ class ImageBatchCompare:
             messagebox.showwarning("Warning", "Please add at least two folders for comparison.")
             return
         
-        self.set_dpi_awareness(False)
-        
         # Maximize the window
         self.root.state('zoomed')  # This works for Windows and some Linux environments
         
@@ -262,8 +242,6 @@ class ImageBatchCompare:
             self.root.title("Image Batch Compare")
 
     def stop_comparison(self):
-        self.set_dpi_awareness(True)
-        
         # Restore the window to its original size
         self.root.state('normal')
         
@@ -480,12 +458,35 @@ class ImageBatchCompare:
         if self.click_disable_timer is not None:
             self.root.after_cancel(self.click_disable_timer)
         
+        # Recalculate base font size based on screen resolution
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        self.base_font_size = self.calculate_base_font_size(screen_width, screen_height)
+        
+        # Update UI elements with new font size
+        self.update_ui_font_sizes()
+
         # Disable clicks
         self.click_disabled = True
         
         # Set timers
         self.resize_timer = self.root.after(200, self.display_current_screen)
         self.click_disable_timer = self.root.after(100, self.enable_clicks)
+
+    def update_ui_font_sizes(self):
+        # Update button style
+        button_style = ttk.Style()
+        button_style.configure('Small.TButton', padding=(self.get_font_size(0.5), self.get_font_size(0.5)), font=('Helvetica', self.get_font_size(0.8)))
+
+        # Update Treeview style
+        style = ttk.Style()
+        font_size = self.get_font_size(0.8)
+        style.configure("Treeview", font=('Helvetica', font_size))
+        style.configure("Treeview.Heading", font=('Helvetica', self.get_font_size(0.9), "bold"))
+
+        # Calculate row height based on font size
+        row_height = font_size * 2  # Adjust this multiplier as needed
+        style.configure("Treeview", rowheight=row_height)
 
     def enable_clicks(self):
         self.click_disabled = False
@@ -497,8 +498,34 @@ class ImageBatchCompare:
         messagebox.showinfo("Comparison Complete", result)
         self.stop_comparison()
 
+    def reset_comparison_state(self):
+        """Reset the state of the comparison process."""
+        self.current_comparison = 0
+        self.current_group_index = 0
+        self.group_winner = None
+        self.current_screen_images = []
+        self.screen_winner = None
+        self.current_index = 0
+        self.winner_position = None
+        self.comparisons_within_group = 0
+        self.votes = {folder: 0 for folder in self.folders}
+        print("Comparison state has been reset.")
+
     def run(self):
         self.root.mainloop()
+
+    # Reintroduce the set_dpi_awareness method
+    def set_dpi_awareness(self):
+        if sys.platform.startswith('win'):
+            try:
+                import ctypes
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)
+            except:
+                pass
+        elif sys.platform.startswith('linux'):
+            # For Linux, we can adjust the scaling factor of the root window
+            scale = self.root.winfo_fpixels('1i') / 72.0
+            self.root.tk.call('tk', 'scaling', scale)
 
 if __name__ == "__main__":
     tool = ImageBatchCompare()
