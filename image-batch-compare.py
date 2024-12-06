@@ -157,7 +157,7 @@ class ImageBatchCompare:
                         self.folders.append(folder)
                         self.votes[folder] = 0
                         images = [f for f in os.listdir(folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
-                        self.folder_images[folder] = sorted(images, key=lambda x: os.path.getmtime(os.path.join(folder, x)))
+                        self.folder_images[folder] = sorted(images)
                     else:
                         print(f"Warning: Folder '{folder}' not found. Skipping.")
             
@@ -216,7 +216,7 @@ class ImageBatchCompare:
         # Load images for all folders here
         for folder in self.folders:
             images = [f for f in os.listdir(folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
-            self.folder_images[folder] = sorted(images, key=lambda x: os.path.getmtime(os.path.join(folder, x)))
+            self.folder_images[folder] = sorted(images)
         
         self.main_frame.grid_remove()
         self.image_frame.grid()
