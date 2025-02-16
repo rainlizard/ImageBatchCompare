@@ -147,6 +147,9 @@ class ImageBatchCompare:
         for folder in self.folders:
             self.folder_tree.insert("", "end", values=(folder,))
 
+        # Add right-click binding to the folder tree
+        self.folder_tree.bind("<Button-3>", self.on_right_click)
+
     def load_config(self):
         if os.path.exists(self.config_file):
             with open(self.config_file, 'r') as f:
@@ -526,6 +529,18 @@ class ImageBatchCompare:
             # For Linux, we can adjust the scaling factor of the root window
             scale = self.root.winfo_fpixels('1i') / 72.0
             self.root.tk.call('tk', 'scaling', scale)
+
+    def on_right_click(self, event):
+        # Get the item that was clicked
+        item = self.folder_tree.identify('item', event.x, event.y)
+        if item:
+            folder = self.folder_tree.item(item)['values'][0]
+            if folder in self.folders:
+                self.folders.remove(folder)
+                self.votes.pop(folder, None)
+                self.folder_images.pop(folder, None)
+                self.folder_tree.delete(item)
+                self.save_config()
 
 if __name__ == "__main__":
     tool = ImageBatchCompare()
