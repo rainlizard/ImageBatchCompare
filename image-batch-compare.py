@@ -7,6 +7,9 @@ from PIL import Image, ImageTk
 import sys
 import json
 from tkinterdnd2 import *
+import time
+import shutil
+import subprocess
 
 class ImageBatchCompare:
     def __init__(self):
@@ -128,14 +131,33 @@ class ImageBatchCompare:
         # Configure row height and padding
         style.configure("Treeview", rowheight=row_height)
 
-        self.folder_tree = ttk.Treeview(self.tree_frame, columns=("path",), show="headings", style="Treeview")
+        # Create a frame to hold the tree and the folder icons
+        self.tree_container = ttk.Frame(self.tree_frame)
+        self.tree_container.grid(row=0, column=0, sticky="nsew")
+        self.tree_container.grid_columnconfigure(0, weight=1)
+        self.tree_container.grid_rowconfigure(0, weight=1)
+
+        self.folder_tree = ttk.Treeview(self.tree_container, columns=("button", "path"), show="headings", style="Treeview")
+        self.folder_tree.heading("button", text="")  # Empty header for button column
         self.folder_tree.heading("path", text="List of image groups to compare")
-        self.folder_tree.column("path", anchor="w")
+        self.folder_tree.column("#0", width=0, stretch=False)  # Hide the default first column
+        self.folder_tree.column("button", anchor="center", width=40, minwidth=40, stretch=False)  # Fixed width for icon
+        self.folder_tree.column("path", anchor="w", stretch=True)  # Allow path column to stretch
         self.folder_tree.grid(row=0, column=0, sticky="nsew")
 
         scrollbar = ttk.Scrollbar(self.tree_frame, orient="vertical", command=self.folder_tree.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.folder_tree.configure(yscrollcommand=scrollbar.set)
+
+        # Add binding for mouse motion instead of tag bindings
+        self.folder_tree.bind('<Motion>', self.on_icon_hover)
+        
+        # Store the last hovered item
+        self.last_hovered_item = None
+        self.hover_animation_id = None
+
+        # Create folder icon buttons for existing items
+        self.update_folder_icons()
 
         self.image_frame = ttk.Frame(self.root)
         self.image_frame.grid(row=0, column=0, sticky="nsew")
@@ -147,9 +169,12 @@ class ImageBatchCompare:
         self.root.bind("<Configure>", self.on_window_configure)
         self.root.bind("<Escape>", lambda e: self.stop_comparison())
 
+        # Add binding for folder icon clicks
+        self.folder_tree.bind('<Button-1>', self.open_folder)
+        
         # Populate the Treeview with folders from config
         for folder in self.folders:
-            self.folder_tree.insert("", "end", values=(folder,))
+            self.folder_tree.insert("", "end", values=("📂", folder), tags=('folder_icon',))
 
         # Add right-click binding to the folder tree
         self.folder_tree.bind("<Button-3>", self.on_right_click)
@@ -182,17 +207,26 @@ class ImageBatchCompare:
             self.folders.append(folder)
             self.votes[folder] = 0
             
-            self.folder_tree.insert("", "end", values=(folder,))
+            # Insert with folder icon and tag
+            item_id = self.folder_tree.insert("", "end", values=("📂", folder), tags=('folder_icon',))
             self.save_config()
 
     def remove_folder(self):
         selected_item = self.folder_tree.selection()
         if selected_item:
-            folder = self.folder_tree.item(selected_item)['values'][0]
+            folder = self.folder_tree.item(selected_item)['values'][1]  # Get path from second column
             if folder in self.folders:
+                # Check if this is a temp directory and delete it
+                if os.path.dirname(folder) == os.environ.get('TEMP', '/tmp') and 'image_batch_' in os.path.basename(folder):
+                    try:
+                        print(f"Removing temp directory: {folder}")
+                        shutil.rmtree(folder)
+                    except Exception as e:
+                        print(f"Error removing temp directory: {e}")
+                
                 self.folders.remove(folder)
                 self.votes.pop(folder, None)
-                self.folder_images.pop(folder, None)  # Use pop with a default value
+                self.folder_images.pop(folder, None)
                 self.folder_tree.delete(selected_item)
                 self.save_config()
 
@@ -205,7 +239,7 @@ class ImageBatchCompare:
                 if folder not in self.folders:
                     self.folders.append(folder)
                     self.votes[folder] = 0
-                    self.folder_tree.insert("", "end", values=(folder,))
+                    self.folder_tree.insert("", "end", values=("📂", folder))
             self.save_config()
 
     def start_comparison(self):
@@ -535,11 +569,18 @@ class ImageBatchCompare:
             self.root.tk.call('tk', 'scaling', scale)
 
     def on_right_click(self, event):
-        # Get the item that was clicked
         item = self.folder_tree.identify('item', event.x, event.y)
         if item:
-            folder = self.folder_tree.item(item)['values'][0]
+            folder = self.folder_tree.item(item)['values'][1]  # Get path from second column
             if folder in self.folders:
+                # Check if this is a temp directory and delete it
+                if os.path.dirname(folder) == os.environ.get('TEMP', '/tmp') and 'image_batch_' in os.path.basename(folder):
+                    try:
+                        print(f"Removing temp directory: {folder}")
+                        shutil.rmtree(folder)
+                    except Exception as e:
+                        print(f"Error removing temp directory: {e}")
+                
                 self.folders.remove(folder)
                 self.votes.pop(folder, None)
                 self.folder_images.pop(folder, None)
@@ -547,18 +588,167 @@ class ImageBatchCompare:
                 self.save_config()
 
     def handle_drop(self, event):
-        # Parse the dropped paths
-        paths = event.data.split(' ')
-        # Clean up paths (remove curly braces and quotes if present)
+        print("Drop event detected!")
+        
+        # Get the raw data and clean it up
+        raw_data = event.data
+        print(f"Raw data: {raw_data}")
+        
+        # Handle paths with spaces by properly parsing the curly braces
+        paths = []
+        current_path = ""
+        in_braces = False
+        
+        for char in raw_data:
+            if char == '{':
+                in_braces = True
+            elif char == '}':
+                in_braces = False
+                if current_path:
+                    paths.append(current_path.strip())
+                    current_path = ""
+            elif char == ' ' and not in_braces:
+                if current_path:
+                    paths.append(current_path.strip())
+                    current_path = ""
+            else:
+                current_path += char
+        
+        if current_path:
+            paths.append(current_path.strip())
+        
+        print(f"Parsed paths: {paths}")
+        
+        # Clean up paths (remove any remaining curly braces)
         paths = [path.strip('{}').strip('"') for path in paths]
+        print(f"Cleaned paths: {paths}")
+        
+        # Reconstruct full file paths if needed
+        full_paths = []
+        current_dir = None
         
         for path in paths:
+            if os.path.isdir(path):
+                current_dir = path
+            elif current_dir and os.path.isfile(os.path.join(current_dir, path)):
+                full_paths.append(os.path.join(current_dir, path))
+            elif os.path.isfile(path):
+                full_paths.append(path)
+        
+        print(f"Full paths: {full_paths}")
+        
+        # Filter for image files
+        image_files = [
+            path for path in full_paths 
+            if path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))
+        ]
+        print(f"Found image files: {image_files}")
+        
+        if image_files:
+            # Find the next available batch number
+            existing_batches = []
+            for folder in self.folders:
+                if os.path.dirname(folder) == os.environ.get('TEMP', '/tmp'):
+                    try:
+                        batch_name = os.path.basename(folder)
+                        if batch_name.startswith('image_batch_'):
+                            batch_num = int(batch_name.replace('image_batch_', ''))
+                            existing_batches.append(batch_num)
+                    except ValueError:
+                        continue
+            
+            next_batch = 1
+            if existing_batches:
+                next_batch = max(existing_batches) + 1
+            
+            # Create a temp directory with the next batch number
+            temp_dir = os.path.join(os.environ.get('TEMP', '/tmp'), f'image_batch_{next_batch}')
+            print(f"Creating temp directory: {temp_dir}")
+            
+            # Create directory if it doesn't exist, or clean it if it does
+            if os.path.exists(temp_dir):
+                for file in os.listdir(temp_dir):
+                    file_path = os.path.join(temp_dir, file)
+                    try:
+                        if os.path.isfile(file_path):
+                            os.unlink(file_path)
+                    except Exception as e:
+                        print(f"Error deleting file {file_path}: {e}")
+            else:
+                os.makedirs(temp_dir, exist_ok=True)
+            
+            # Copy images to temp directory
+            for image_path in image_files:
+                filename = os.path.basename(image_path)
+                dest_path = os.path.join(temp_dir, filename)
+                print(f"Copying {image_path} to {dest_path}")
+                shutil.copy2(image_path, dest_path)
+            
+            # Add the temp directory as a folder
+            if temp_dir not in self.folders:
+                print(f"Adding temp directory to folders: {temp_dir}")
+                self.folders.append(temp_dir)
+                self.votes[temp_dir] = 0
+                self.folder_tree.insert("", "end", values=("📂", temp_dir))
+                self.save_config()
+        
+        # Handle directories as before
+        for path in paths:
             if os.path.isdir(path) and path not in self.folders:
+                print(f"Adding directory: {path}")
                 self.folders.append(path)
                 self.votes[path] = 0
-                self.folder_tree.insert("", "end", values=(path,))
+                self.folder_tree.insert("", "end", values=("📂", path))
         
         self.save_config()
+
+    def update_folder_icons(self):
+        for item in self.folder_tree.get_children():
+            values = list(self.folder_tree.item(item)['values'])
+            values[0] = "📂"
+            self.folder_tree.item(item, values=values)
+
+    def open_folder(self, event):
+        item = self.folder_tree.identify('item', event.x, event.y)
+        if item:
+            # Get the column that was clicked
+            column = self.folder_tree.identify_column(event.x)
+            if column == '#1':  # Button column (first column)
+                folder_path = self.folder_tree.item(item)['values'][1]  # Get path from second column
+                try:
+                    if sys.platform == 'win32':
+                        os.startfile(folder_path)
+                    elif sys.platform == 'darwin':  # macOS
+                        subprocess.run(['open', folder_path])
+                    else:  # Linux
+                        subprocess.run(['xdg-open', folder_path])
+                except Exception as e:
+                    print(f"Error opening folder: {e}")
+                    messagebox.showerror("Error", f"Could not open folder: {str(e)}")
+
+    def on_icon_hover(self, event):
+        item = self.folder_tree.identify('item', event.x, event.y)
+        column = self.folder_tree.identify_column(event.x)
+        
+        if column == '#1' and item:  # First column (folder icon)
+            if item != self.last_hovered_item:
+                # Reset previous hover
+                if self.last_hovered_item:
+                    values = list(self.folder_tree.item(self.last_hovered_item)['values'])
+                    values[0] = "📁"  # Change back to regular folder
+                    self.folder_tree.item(self.last_hovered_item, values=values)
+                
+                # Set new hover
+                values = list(self.folder_tree.item(item)['values'])
+                values[0] = "✨"  # Change to sparkle
+                self.folder_tree.item(item, values=values)
+                self.last_hovered_item = item
+        elif self.last_hovered_item and (not item or column != '#1'):
+            # Mouse moved away from folder icon
+            values = list(self.folder_tree.item(self.last_hovered_item)['values'])
+            values[0] = "📁"  # Change back to regular folder
+            self.folder_tree.item(self.last_hovered_item, values=values)
+            self.last_hovered_item = None
 
 if __name__ == "__main__":
     tool = ImageBatchCompare()
