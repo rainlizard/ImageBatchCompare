@@ -99,17 +99,16 @@ class ImageBatchCompare:
 
         self.control_frame = ttk.Frame(self.main_frame)
         self.control_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=10)
-        self.control_frame.columnconfigure(1, weight=1)
+        self.control_frame.columnconfigure(3, weight=1)
 
-        # Configure button style with reduced size
         button_style = ttk.Style()
         button_style.configure('Small.TButton', padding=(self.get_font_size(0.5), self.get_font_size(0.5)), font=('Helvetica', self.get_font_size(0.8)))
 
         ttk.Button(self.control_frame, text="Add Folder", command=self.add_folder, style='Small.TButton').grid(row=0, column=0, padx=5, pady=5)
-        ttk.Button(self.control_frame, text="Add Subfolders", command=self.add_subfolders, style='Small.TButton').grid(row=0, column=1, padx=5, pady=5)
-        ttk.Button(self.control_frame, text="Remove Folder", command=self.remove_folder, style='Small.TButton').grid(row=0, column=2, padx=5, pady=5)
+        ttk.Button(self.control_frame, text="Remove Folder", command=self.remove_folder, style='Small.TButton').grid(row=0, column=1, padx=5, pady=5)
+        ttk.Button(self.control_frame, text="Add Subfolders", command=self.add_subfolders, style='Small.TButton').grid(row=0, column=2, padx=5, pady=5)
         self.start_button = ttk.Button(self.control_frame, text="Start Comparison", command=self.start_comparison, style='Small.TButton')
-        self.start_button.grid(row=0, column=3, padx=5, pady=5)
+        self.start_button.grid(row=0, column=4, padx=5, pady=5)
 
         self.tree_frame = ttk.Frame(self.main_frame)
         self.tree_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=10)
@@ -130,7 +129,7 @@ class ImageBatchCompare:
         style.configure("Treeview", rowheight=row_height)
 
         self.folder_tree = ttk.Treeview(self.tree_frame, columns=("path",), show="headings", style="Treeview")
-        self.folder_tree.heading("path", text="Folder Paths")
+        self.folder_tree.heading("path", text="List of image groups to compare")
         self.folder_tree.column("path", anchor="w")
         self.folder_tree.grid(row=0, column=0, sticky="nsew")
 
