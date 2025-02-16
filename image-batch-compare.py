@@ -6,10 +6,11 @@ from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 import sys
 import json
+from tkinterdnd2 import *
 
 class ImageBatchCompare:
     def __init__(self):
-        self.root = tk.Tk()
+        self.root = TkinterDnD.Tk()
         self.root.title("Image Batch Compare")
         self.root.geometry("1440x720")
         
@@ -84,6 +85,10 @@ class ImageBatchCompare:
         return int(self.base_font_size * size_factor)
 
     def setup_ui(self):
+        # Enable drop functionality for the main window
+        self.root.drop_target_register(DND_FILES)
+        self.root.dnd_bind('<<Drop>>', self.handle_drop)
+
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
 
@@ -541,6 +546,20 @@ class ImageBatchCompare:
                 self.folder_images.pop(folder, None)
                 self.folder_tree.delete(item)
                 self.save_config()
+
+    def handle_drop(self, event):
+        # Parse the dropped paths
+        paths = event.data.split(' ')
+        # Clean up paths (remove curly braces and quotes if present)
+        paths = [path.strip('{}').strip('"') for path in paths]
+        
+        for path in paths:
+            if os.path.isdir(path) and path not in self.folders:
+                self.folders.append(path)
+                self.votes[path] = 0
+                self.folder_tree.insert("", "end", values=(path,))
+        
+        self.save_config()
 
 if __name__ == "__main__":
     tool = ImageBatchCompare()
