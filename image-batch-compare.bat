@@ -1,1 +1,0 @@
-start /B pythonw image-batch-compare.py
