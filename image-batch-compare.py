@@ -363,17 +363,54 @@ class ImageBatchCompare:
         window_width = self.canvas.winfo_width()
         window_height = self.canvas.winfo_height()
         
-        # Create the choice text at the top with updated labels
+        # Create temporary text objects to measure their width
+        font = ('Helvetica', self.get_font_size(1.2), 'bold')
+        left_label = "Choose Image A"
+        right_label = "Choose Image B"
+        
+        # Create temporary text objects to measure their width
+        temp_left = self.canvas.create_text(0, 0, text=left_label, font=font)
+        temp_right = self.canvas.create_text(0, 0, text=right_label, font=font)
+        
+        # Get the width of each text object
+        left_bbox = self.canvas.bbox(temp_left)
+        right_bbox = self.canvas.bbox(temp_right)
+        left_width = left_bbox[2] - left_bbox[0]
+        right_width = right_bbox[2] - right_bbox[0]
+        
+        # Delete temporary text objects
+        self.canvas.delete(temp_left)
+        self.canvas.delete(temp_right)
+        
+        # Calculate minimum spacing needed between text centers
+        min_spacing = left_width/2 + right_width/2 + 20  # Add 20px extra padding
+        
+        # Calculate positions based on available space
+        center_x = window_width / 2
+        
+        # If window is too narrow, stack the labels vertically
+        if window_width < min_spacing * 2:
+            left_x = center_x
+            right_x = center_x
+            left_y = 30
+            right_y = 70
+        else:
+            # Otherwise position them horizontally with proper spacing
+            left_x = center_x - min_spacing/2
+            right_x = center_x + min_spacing/2
+            left_y = right_y = 50
+        
+        # Create the choice text labels
         self.left_text = self.canvas.create_text(
-            window_width * 0.25, 50, 
-            text="Choose Image A", 
-            fill="#555555", font=('Helvetica', self.get_font_size(1.2), 'bold')
+            left_x, left_y,
+            text=left_label, 
+            fill="#555555", font=font
         )
         
         self.right_text = self.canvas.create_text(
-            window_width * 0.75, 50, 
-            text="Choose Image B", 
-            fill="#555555", font=('Helvetica', self.get_font_size(1.2), 'bold')
+            right_x, right_y,
+            text=right_label, 
+            fill="#555555", font=font
         )
         
         # Load both images as PIL images
