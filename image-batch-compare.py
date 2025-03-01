@@ -172,6 +172,9 @@ class ImageBatchCompare:
         # Add binding for folder icon clicks
         self.folder_tree.bind('<Button-1>', self.open_folder)
         
+        # Add binding for Ctrl+A to select all folders
+        self.root.bind("<Control-a>", self.select_all_folders)
+        
         # Populate the Treeview with folders from config
         for folder in self.folders:
             self.folder_tree.insert("", "end", values=("📂", folder), tags=('folder_icon',))
@@ -922,6 +925,17 @@ class ImageBatchCompare:
         """Refresh the display after resize"""
         if self.image_frame.winfo_viewable() and hasattr(self, 'current_screen_images'):
             self.display_current_screen()
+
+    def select_all_folders(self, event):
+        """Select all folders in the folder tree when Ctrl+A is pressed"""
+        # Only apply if the main frame is visible (not in comparison mode)
+        if self.main_frame.winfo_viewable():
+            # Get all items in the tree
+            all_items = self.folder_tree.get_children()
+            # Select all items
+            if all_items:
+                self.folder_tree.selection_set(all_items)
+            return "break"  # Prevent the default Ctrl+A behavior
 
 if __name__ == "__main__":
     tool = ImageBatchCompare()
