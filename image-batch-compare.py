@@ -10,6 +10,7 @@ from tkinterdnd2 import *
 import time
 import shutil
 import subprocess
+import datetime
 
 class ImageBatchCompare:
     def __init__(self):
@@ -37,11 +38,11 @@ class ImageBatchCompare:
         self.resize_timer = None
         self.total_comparisons = 0
         self.current_comparison = 0
-        self.comparisons_within_group = 0
+        self.comparisons_within_subgroup = 0
         
-        self.current_group_index = 0
-        self.current_group = []
-        self.group_winner = None
+        self.current_subgroup_index = 0
+        self.current_subgroup = []
+        self.subgroup_winner = None
         self.current_screen_images = []
         self.screen_winner = None
         self.current_index = 0
@@ -49,6 +50,11 @@ class ImageBatchCompare:
         
         self.config_file = "ibc-settings.json"
         self.load_config()
+        
+        # Create results directory if it doesn't exist
+        self.results_dir = "Results"
+        if not os.path.exists(self.results_dir):
+            os.makedirs(self.results_dir)
         
         self.root.bind("<BackSpace>", self.skip_current_selection)
 
@@ -288,7 +294,7 @@ class ImageBatchCompare:
         
         self.root.bind("<BackSpace>", self.skip_current_selection)
         
-        self.load_next_group()
+        self.load_next_subgroup()
 
     def calculate_total_comparisons(self):
         total = 0
@@ -299,8 +305,8 @@ class ImageBatchCompare:
         return total
 
     def update_title(self):
-        if self.image_frame.winfo_viewable():  # Only show comparison number if we're in comparison mode
-            self.root.title(f"Image Batch Compare - Comparison {self.current_comparison + 1}/{self.total_comparisons}")
+        if self.image_frame.winfo_viewable():
+            self.root.title(f"Image Batch Compare • Subgroup {self.current_subgroup_index + 1} • {self.current_comparison + 1}/{self.total_comparisons}")
         else:
             self.root.title("Image Batch Compare")
 
@@ -316,60 +322,70 @@ class ImageBatchCompare:
         self.root.unbind("<BackSpace>")
 
     def skip_current_selection(self, event):
-        remaining_in_group = (len(self.folders) * (len(self.folders) - 1)) // 2 - self.comparisons_within_group
-        self.current_comparison += remaining_in_group
-        self.current_group_index += 1
-        self.load_next_group()
+        # The current formula is incorrect - it's calculating too many remaining comparisons
+        # remaining_in_subgroup = (len(self.folders) * (len(self.folders) - 1)) // 2 - self.comparisons_within_subgroup
+        
+        # The correct formula should be based on how many comparisons are left in this subgroup
+        # For a tournament style comparison, we need (n-1) comparisons for n items
+        total_in_subgroup = len(self.current_subgroup) - 1
+        remaining_in_subgroup = total_in_subgroup - self.comparisons_within_subgroup
+        
+        # Add the remaining comparisons to the counter
+        self.current_comparison += remaining_in_subgroup
+        
+        # Move to the next subgroup
+        self.current_subgroup_index += 1
+        self.load_next_subgroup()
 
-    def load_next_group(self):
-        print(f"Loading next group. Current group index: {self.current_group_index}")
-        if self.current_group_index >= max(len(images) for images in self.folder_images.values()):
+    def load_next_subgroup(self):
+        print(f"Loading next subgroup. Current subgroup index: {self.current_subgroup_index}")
+        if self.current_subgroup_index >= max(len(images) for images in self.folder_images.values()):
             self.show_results()
             return
 
-        self.current_group = []
+        self.current_subgroup = []
         for folder in self.folders:
-            if self.current_group_index < len(self.folder_images[folder]):
-                image_name = self.folder_images[folder][self.current_group_index]
+            if self.current_subgroup_index < len(self.folder_images[folder]):
+                image_name = self.folder_images[folder][self.current_subgroup_index]
                 image_path = os.path.join(folder, image_name)
-                self.current_group.append((folder, image_path))
+                self.current_subgroup.append((folder, image_path))
 
-        print(f"New group size: {len(self.current_group)}")
+        print(f"New subgroup size: {len(self.current_subgroup)}")
 
-        # Shuffle the current group
-        random.shuffle(self.current_group)
+        # Shuffle the current subgroup
+        random.shuffle(self.current_subgroup)
 
-        self.group_winner = None
+        self.subgroup_winner = None
         self.current_pair_index = 0
-        self.comparisons_within_group = 0
+        self.comparisons_within_subgroup = 0
         
-        if len(self.current_group) > 1:
+        if len(self.current_subgroup) > 1:
             self.load_next_screen()
         else:
-            self.current_group_index += 1
-            self.load_next_group()
+            self.current_subgroup_index += 1
+            self.load_next_subgroup()
 
     def load_next_screen(self):
-        if self.group_winner is None:
-            # First comparison in the group
-            self.current_pair = self.current_group[:2]
-            print(f"First comparison in group: {self.current_pair[0][0]} vs {self.current_pair[1][0]}")
-        elif self.current_pair_index < len(self.current_group) - 1:
+        if self.subgroup_winner is None:
+            # First comparison in the subgroup
+            self.current_pair = self.current_subgroup[:2]
+            print(f"First comparison in subgroup: {self.current_pair[0][0]} vs {self.current_pair[1][0]}")
+        elif self.current_pair_index < len(self.current_subgroup) - 1:
             # Compare the winner with the next image
-            next_image = self.current_group[self.current_pair_index + 1]
-            self.current_pair = [self.group_winner, next_image]
-            print(f"Next comparison: {self.group_winner[0]} vs {next_image[0]}")
+            next_image = self.current_subgroup[self.current_pair_index + 1]
+            self.current_pair = [self.subgroup_winner, next_image]
+            print(f"Next comparison: {self.subgroup_winner[0]} vs {next_image[0]}")
             
             # Place the winner on the opposite side of the last chosen side
             if self.last_chosen_side == 'left':
                 self.current_pair = self.current_pair[::-1]  # Reverse the pair
                 print(f"Reversed pair due to last choice being left: {self.current_pair[0][0]} vs {self.current_pair[1][0]}")
         else:
-            # We've compared all images in this group
-            self.votes[self.group_winner[0]] += 1
-            print(f"Added vote for group winner: {self.group_winner[0]}")
-            self.current_group_index += 1
-            self.load_next_group()
+            # We've compared all images in this subgroup
+            self.votes[self.subgroup_winner[0]] += 1
+            print(f"Added vote for subgroup winner: {self.subgroup_winner[0]}")
+            self.current_subgroup_index += 1
+            self.load_next_subgroup()
             return
 
         self.current_screen_images = self.current_pair
@@ -504,14 +520,14 @@ class ImageBatchCompare:
             self.display_image(self.left_image)
             self.canvas.itemconfig(self.left_text, fill="#FFFFFF")
             self.canvas.itemconfig(self.right_text, fill="#BBBBBB")  # Darker inactive text
-            self.canvas.itemconfig(self.left_bg, stipple="gray25")   # 75% opaque black
-            self.canvas.itemconfig(self.right_bg, stipple="gray75")  # 25% opaque black
+            self.canvas.itemconfig(self.left_bg, stipple="gray25")   # 75% opaque black background
+            self.canvas.itemconfig(self.right_bg, stipple="gray75")  # 25% opaque black background
         else:
             self.display_image(self.right_image)
             self.canvas.itemconfig(self.left_text, fill="#BBBBBB")   # Darker inactive text
             self.canvas.itemconfig(self.right_text, fill="#FFFFFF")
-            self.canvas.itemconfig(self.left_bg, stipple="gray75")   # 25% opaque black
-            self.canvas.itemconfig(self.right_bg, stipple="gray25")  # 75% opaque black
+            self.canvas.itemconfig(self.left_bg, stipple="gray75")   # 25% opaque black background
+            self.canvas.itemconfig(self.right_bg, stipple="gray25")  # 75% opaque black background
         
         # Check if mouse is close to center and draw dividing line if needed
         self.check_and_draw_divider(mouse_x)
@@ -645,25 +661,25 @@ class ImageBatchCompare:
         print(f"Before vote - Current votes: {self.votes}")
         
         # Store the winner as a tuple of (folder, image_path)
-        self.group_winner = (chosen_folder, chosen_image_path)
+        self.subgroup_winner = (chosen_folder, chosen_image_path)
         
         # Increment counters
         self.current_comparison += 1
         self.current_pair_index += 1
-        self.comparisons_within_group += 1
+        self.comparisons_within_subgroup += 1
 
-        # Check if we've completed all comparisons in this group
-        if self.comparisons_within_group >= len(self.current_group) - 1:
-            # This was the last comparison in the group
+        # Check if we've completed all comparisons in this subgroup
+        if self.comparisons_within_subgroup >= len(self.current_subgroup) - 1:
+            # This was the last comparison in the subgroup
             # Add a vote for the winning folder
             self.votes[chosen_folder] += 1
-            print(f"Added vote for group winner: {chosen_folder}")
+            print(f"Added vote for subgroup winner: {chosen_folder}")
             
-            # Move to the next group
-            self.current_group_index += 1
-            self.load_next_group()
+            # Move to the next subgroup
+            self.current_subgroup_index += 1
+            self.load_next_subgroup()
         else:
-            # Continue with the next comparison in this group
+            # Continue with the next comparison in this subgroup
             self.load_next_screen()
 
         print(f"After vote - Current votes: {self.votes}")
@@ -720,23 +736,115 @@ class ImageBatchCompare:
     def enable_clicks(self):
         self.click_disabled = False
 
+    def save_results_to_file(self):
+        """Save the comparison results to a timestamped text file in the Results folder."""
+        # Create a timestamp for the filename
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        result_file_name = f"comparison_results_{timestamp}.txt"
+        result_file_path = os.path.join(self.results_dir, result_file_name)
+        
+        # Prepare the results content
+        result_content = f"Image Batch Compare Results - {timestamp}\n"
+        result_content += "=" * 50 + "\n\n"
+        
+        # Add the comparison details
+        result_content += f"Total comparisons: {self.total_comparisons}\n"
+        result_content += f"Folders compared: {len(self.folders)}\n\n"
+        
+        # Add the voting results first (moved to the top)
+        result_content += "Results by folder (sorted by votes):\n"
+        result_content += "-" * 30 + "\n"
+        
+        # Sort folders by vote count (descending)
+        sorted_folders = sorted(self.votes.items(), key=lambda x: x[1], reverse=True)
+        
+        for i, (folder, votes) in enumerate(sorted_folders, 1):
+            folder_name = os.path.basename(folder)
+            result_content += f"{i}. {folder_name}: {votes} votes\n"
+        
+        result_content += "\n"
+        
+        # Add detailed folder information after the results
+        result_content += "Folders included in comparison:\n"
+        result_content += "-" * 30 + "\n"
+        for i, folder in enumerate(self.folders, 1):
+            folder_name = os.path.basename(folder)
+            result_content += f"{i}. {folder_name}\n"
+            result_content += f"   Full path: {folder}\n"
+            result_content += f"   Image count: {len(self.folder_images.get(folder, []))}\n\n"
+        
+        # Add timestamp at the end
+        result_content += "-" * 50 + "\n"
+        result_content += f"Comparison completed at: {timestamp}\n"
+        
+        # Write the results to the file
+        with open(result_file_path, "w") as f:
+            f.write(result_content)
+        
+        # Save a copy of the configuration file
+        config_copy_path = os.path.join(self.results_dir, f"config_{timestamp}.json")
+        config = {'folders': [folder for folder in self.folders if os.path.exists(folder)]}
+        with open(config_copy_path, 'w') as f:
+            json.dump(config, f, indent=4)
+        
+        return result_file_path
+
     def show_results(self):
-        result = "Results:\n"
-        for folder, votes in self.votes.items():
-            result += f"{os.path.basename(folder)}: {votes} votes\n"
-        messagebox.showinfo("Comparison Complete", result)
+        # Save results to file
+        result_file_path = self.save_results_to_file()
+        
+        # Create a message with the sorted results
+        result_message = "Results:\n"
+        result_message += "-" * 30 + "\n"
+        
+        # Sort folders by vote count (descending)
+        sorted_folders = sorted(self.votes.items(), key=lambda x: x[1], reverse=True)
+        
+        # Function to get ordinal suffix
+        def get_ordinal(n):
+            if 10 <= n % 100 <= 20:
+                suffix = 'th'
+            else:
+                suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+            return f"{n}{suffix}"
+        
+        for i, (folder, votes) in enumerate(sorted_folders, 1):
+            folder_name = os.path.basename(folder)
+            result_message += f"{get_ordinal(i)}. {folder_name}: {votes} votes\n"
+        
+        # Add file path information
+        result_message += f"\nResults have been saved to:\n{result_file_path}"
+        
+        # Show the results message box with the sorted vote counts
+        messagebox.showinfo("Comparison Complete", result_message)
+        
+        # Stop the comparison and return to the main screen
         self.stop_comparison()
+
+    def open_file(self, file_path):
+        """Open the specified file with the default application."""
+        try:
+            if sys.platform == 'win32':
+                os.startfile(file_path)
+            elif sys.platform == 'darwin':  # macOS
+                subprocess.run(['open', file_path])
+            else:  # Linux
+                subprocess.run(['xdg-open', file_path])
+            return True
+        except Exception as e:
+            print(f"Error opening file: {e}")
+            return False
 
     def reset_comparison_state(self):
         """Reset the state of the comparison process."""
         self.current_comparison = 0
-        self.current_group_index = 0
-        self.group_winner = None
+        self.current_subgroup_index = 0
+        self.subgroup_winner = None
         self.current_screen_images = []
         self.screen_winner = None
         self.current_index = 0
         self.winner_position = None
-        self.comparisons_within_group = 0
+        self.comparisons_within_subgroup = 0
         self.votes = {folder: 0 for folder in self.folders}
         print("Comparison state has been reset.")
 

@@ -8,7 +8,6 @@ ENV/
 
 # VS Code settings
 .vscode/
-ibc-settings.json
 
 # Python cache files
 __pycache__/
@@ -21,7 +20,8 @@ build/
 *.egg-info/
 
 # Application specific
-image-batch-compare.json
+Results/
+ibc-settings.json
 
 # Logs
 *.log 
