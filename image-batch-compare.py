@@ -475,14 +475,11 @@ class ImageBatchCompare:
                 except Exception as e:
                     print(f"Error loading image: {e}")
         
-        # Draw a vertical line to separate the two halves of the screen
-        self.canvas.create_line(
-            window_width // 2, 0, window_width // 2, window_height,
-            fill="#555555", width=2
-        )
+        # We'll draw the dividing line in on_mouse_move based on mouse position
+        # Get current mouse position
+        mouse_x = self.root.winfo_pointerx() - self.root.winfo_rootx()
         
         # Initially display based on mouse position
-        mouse_x = self.root.winfo_pointerx() - self.root.winfo_rootx()
         if mouse_x < window_width // 2:
             self.display_image(self.left_image)
             self.canvas.itemconfig(self.left_text, fill="#FFFFFF")
@@ -496,8 +493,33 @@ class ImageBatchCompare:
             self.canvas.itemconfig(self.left_bg, stipple="gray75")   # 25% opaque black
             self.canvas.itemconfig(self.right_bg, stipple="gray25")  # 75% opaque black
         
+        # Check if mouse is close to center and draw dividing line if needed
+        self.check_and_draw_divider(mouse_x)
+        
         self.update_title()
         self.root.update_idletasks()
+
+    def check_and_draw_divider(self, mouse_x):
+        """Draw the dividing line only if mouse is close to center"""
+        window_width = self.canvas.winfo_width()
+        window_height = self.canvas.winfo_height()
+        
+        # Define the "close to center" threshold (pixels from center)
+        center_threshold = window_width * 0.025  # 2.5% of window width
+        
+        # Calculate distance from center
+        center_x = window_width / 2
+        distance_from_center = abs(mouse_x - center_x)
+        
+        # Delete any existing divider
+        self.canvas.delete("divider")
+        
+        # Only draw the divider if mouse is close to center
+        if distance_from_center < center_threshold:
+            self.canvas.create_line(
+                window_width // 2, 0, window_width // 2, window_height,
+                fill="#555555", width=2, tags="divider"
+            )
 
     def display_image(self, image_data):
         if image_data:
@@ -511,17 +533,13 @@ class ImageBatchCompare:
             self.canvas.delete("image")
             self.current_image = self.canvas.create_image(x, y, anchor=tk.NW, image=img, tags="image")
             
-            # Make sure the text, backgrounds, and dividing line remain visible
+            # Make sure the text and backgrounds remain visible
             self.canvas.tag_raise("text_bg")
             self.canvas.tag_raise(self.left_text)
             self.canvas.tag_raise(self.right_text)
             
-            # Redraw the dividing line
-            self.canvas.delete("divider")
-            self.canvas.create_line(
-                window_width // 2, 0, window_width // 2, window_height,
-                fill="#555555", width=2, tags="divider"
-            )
+            # Note: We don't redraw the dividing line here anymore
+            # It's handled by check_and_draw_divider in on_mouse_move
 
     def on_mouse_move(self, event):
         """Update the displayed image based on mouse position"""
@@ -547,6 +565,9 @@ class ImageBatchCompare:
             self.canvas.itemconfig(self.left_bg, stipple="gray75")   # 25% opaque black
             self.canvas.itemconfig(self.right_bg, stipple="gray75")  # 75% opaque black
             self.current_side = 'right'
+        
+        # Check if mouse is close to center and draw dividing line if needed
+        self.check_and_draw_divider(event.x)
 
     def on_mouse_press(self, event):
         self.click_start_x = event.x
