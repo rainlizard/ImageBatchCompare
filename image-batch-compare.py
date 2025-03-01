@@ -450,7 +450,7 @@ class ImageBatchCompare:
             left_y + left_height/2 + padding,
             fill="#000000",  # Pure black
             outline="",
-            stipple="gray50",  # This creates 50% transparency
+            stipple="gray75",  # This creates 75% opacity (darker)
             tags="text_bg"
         )
         
@@ -461,7 +461,7 @@ class ImageBatchCompare:
             right_y + right_height/2 + padding,
             fill="#000000",  # Pure black
             outline="",
-            stipple="gray50",  # This creates 50% transparency
+            stipple="gray75",  # This creates 75% opacity (darker)
             tags="text_bg"
         )
         
@@ -519,15 +519,15 @@ class ImageBatchCompare:
         if mouse_x < window_width // 2:
             self.display_image(self.left_image)
             self.canvas.itemconfig(self.left_text, fill="#FFFFFF")
-            self.canvas.itemconfig(self.right_text, fill="#BBBBBB")  # Darker inactive text
-            self.canvas.itemconfig(self.left_bg, stipple="gray25")   # 75% opaque black background
+            self.canvas.itemconfig(self.right_text, fill="#444444")  # Darker inactive text
+            self.canvas.itemconfig(self.left_bg, stipple="gray75")   # 25% opaque black background
             self.canvas.itemconfig(self.right_bg, stipple="gray75")  # 25% opaque black background
         else:
             self.display_image(self.right_image)
-            self.canvas.itemconfig(self.left_text, fill="#BBBBBB")   # Darker inactive text
+            self.canvas.itemconfig(self.left_text, fill="#444444")   # Darker inactive text
             self.canvas.itemconfig(self.right_text, fill="#FFFFFF")
             self.canvas.itemconfig(self.left_bg, stipple="gray75")   # 25% opaque black background
-            self.canvas.itemconfig(self.right_bg, stipple="gray25")  # 75% opaque black background
+            self.canvas.itemconfig(self.right_bg, stipple="gray75")  # 25% opaque black background
         
         # Check if mouse is close to center and draw dividing line if needed
         self.check_and_draw_divider(mouse_x)
@@ -589,7 +589,7 @@ class ImageBatchCompare:
             self.canvas.itemconfig(self.right_text, fill="#444444")  # Darker inactive text
             # For active side: less stippling = more opaque black background
             self.canvas.itemconfig(self.left_bg, stipple="gray75")   # 75% opaque black
-            self.canvas.itemconfig(self.right_bg, stipple="gray75")  # 25% opaque black
+            self.canvas.itemconfig(self.right_bg, stipple="gray75")  # 75% opaque black
             self.current_side = 'left'
         else:
             # When mouse is on the right side, show right image and highlight right text
@@ -598,7 +598,7 @@ class ImageBatchCompare:
             self.canvas.itemconfig(self.left_text, fill="#444444")   # Darker inactive text
             self.canvas.itemconfig(self.right_text, fill="#FFFFFF")
             # For active side: less stippling = more opaque black background
-            self.canvas.itemconfig(self.left_bg, stipple="gray75")   # 25% opaque black
+            self.canvas.itemconfig(self.left_bg, stipple="gray75")   # 75% opaque black
             self.canvas.itemconfig(self.right_bg, stipple="gray75")  # 75% opaque black
             self.current_side = 'right'
         
@@ -636,6 +636,7 @@ class ImageBatchCompare:
                 # Get the chosen image data directly from current_screen_images
                 chosen_folder, chosen_path = self.current_screen_images[chosen_index]
                 
+                # Process the vote without unbinding mouse motion
                 self.vote(chosen_folder, chosen_path)
         
         # Reset the click start coordinates
@@ -684,9 +685,6 @@ class ImageBatchCompare:
 
         print(f"After vote - Current votes: {self.votes}")
         print("--------------------")
-
-        # Refresh the current image based on mouse position
-        self.refresh_current_image()
 
     def refresh_current_image(self):
         mouse_x = self.root.winfo_pointerx() - self.root.winfo_rootx()
@@ -781,11 +779,7 @@ class ImageBatchCompare:
         with open(result_file_path, "w") as f:
             f.write(result_content)
         
-        # Save a copy of the configuration file
-        config_copy_path = os.path.join(self.results_dir, f"config_{timestamp}.json")
-        config = {'folders': [folder for folder in self.folders if os.path.exists(folder)]}
-        with open(config_copy_path, 'w') as f:
-            json.dump(config, f, indent=4)
+        # Removed: Save a copy of the configuration file
         
         return result_file_path
 
