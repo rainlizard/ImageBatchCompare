@@ -483,52 +483,109 @@ class ImageBatchCompare:
         self._update_split_image(slider_x)
 
     def on_mouse_move(self, event):
-        """Update the slider position and displayed images based on mouse position"""
+        """Move the slider to the left or right side when the mouse enters that side"""
+        if not self.image_frame.winfo_viewable():
+            return
+            
         window_width = self.canvas.winfo_width()
-        window_height = self.canvas.winfo_height()
         
-        # Always update the slider position immediately for responsiveness
-        slider_x = event.x
-        self.canvas.coords(self.slider, slider_x, 0, slider_x, window_height)
-        self.canvas.coords(
-            self.slider_handle,
-            slider_x - self.slider_handle_radius, 
-            window_height // 2 - self.slider_handle_radius,
-            slider_x + self.slider_handle_radius, 
-            window_height // 2 + self.slider_handle_radius
-        )
+        # Determine which side of the screen the mouse is on
+        current_side = 'left' if event.x < window_width // 2 else 'right'
         
-        # Update text colors based on slider position
-        # INVERTED: Highlight the text for the OPPOSITE image that would be chosen if clicked
-        if slider_x < window_width // 2:
-            # When slider is on the left side, highlight the RIGHT text (Image B)
+        # Update text colors immediately based on which side the cursor is on
+        # This provides instant visual feedback even before the animation starts
+        if current_side == 'left':
+            # When cursor is on left side, highlight the RIGHT text (Image B)
             self.canvas.itemconfig(self.left_text, fill="#555555")
             self.canvas.itemconfig(self.right_text, fill="#FFFFFF")
         else:
-            # When slider is on the right side, highlight the LEFT text (Image A)
+            # When cursor is on right side, highlight the LEFT text (Image A)
             self.canvas.itemconfig(self.left_text, fill="#FFFFFF")
             self.canvas.itemconfig(self.right_text, fill="#555555")
         
-        # Throttle image updates for smoother performance
+        # Check if the side has changed
+        side_changed = not hasattr(self, 'current_side') or current_side != self.current_side
+        self.current_side = current_side
+        
+        # Set target position based on side
+        target_x = 0 if current_side == 'left' else window_width
+        
+        # Always cancel any existing animation
+        if hasattr(self, 'animation_id'):
+            self.root.after_cancel(self.animation_id)
+        
+        # If the side has changed, clear animation variables to force a fresh start
+        if side_changed:
+            if hasattr(self, 'animation_start_time'):
+                delattr(self, 'animation_start_time')
+            if hasattr(self, 'animation_start_x'):
+                delattr(self, 'animation_start_x')
+            if hasattr(self, 'animation_target_x'):
+                delattr(self, 'animation_target_x')
+            if hasattr(self, 'animation_distance'):
+                delattr(self, 'animation_distance')
+        
+        # Always start the animation to the target position
+        self.animate_slider(target_x)
+
+    def animate_slider(self, target_x, total_duration=500):
+        """Smoothly animate the slider to the target position
+        
+        Uses a time-based approach to ensure the animation takes exactly 0.5 seconds (500ms)
+        regardless of the distance the slider needs to travel.
+        """
+        # Check if the target has changed during animation
+        if hasattr(self, 'animation_target_x') and self.animation_target_x != target_x:
+            # Target changed - reset animation with current position as start
+            slider_coords = self.canvas.coords(self.slider)
+            start_x = slider_coords[0] if slider_coords else self.canvas.winfo_width() // 2
+            
+            self.animation_start_time = time.time()
+            self.animation_start_x = start_x
+            self.animation_target_x = target_x
+            self.animation_distance = target_x - start_x
+        # Initialize animation start time and position if this is the first call
+        elif not hasattr(self, 'animation_start_time') or not hasattr(self, 'animation_start_x'):
+            # Get current slider position
+            slider_coords = self.canvas.coords(self.slider)
+            start_x = slider_coords[0] if slider_coords else self.canvas.winfo_width() // 2
+            
+            self.animation_start_time = time.time()
+            self.animation_start_x = start_x
+            self.animation_target_x = target_x
+            self.animation_distance = target_x - start_x
+        
+        # Calculate how much time has elapsed since animation started
         current_time = time.time()
-        if current_time - self.last_update_time < self.update_interval:
-            # Schedule an update for later if we're throttling
-            if not hasattr(self, 'pending_update') or not self.pending_update:
-                self.pending_update = True
-                self.root.after(int(self.update_interval * 1000), lambda: self._delayed_update(event.x))
+        elapsed_time = (current_time - self.animation_start_time) * 1000  # Convert to ms
+        
+        # Calculate progress (0.0 to 1.0)
+        progress = min(elapsed_time / total_duration, 1.0)
+        
+        # Use easing function for smoother animation (ease-out)
+        # This makes the animation start fast and slow down at the end
+        t = 1.0 - (1.0 - progress) * (1.0 - progress)  # Quadratic ease-out
+        
+        # Calculate current position
+        current_x = self.animation_start_x + (self.animation_distance * t)
+        
+        # Update the display
+        self.display_split_view(int(current_x))
+        
+        # Check if animation is complete
+        if progress >= 1.0:
+            # Animation complete - ensure we're exactly at the target
+            self.display_split_view(self.animation_target_x)
+            
+            # Clean up animation variables
+            delattr(self, 'animation_start_time')
+            delattr(self, 'animation_start_x')
+            delattr(self, 'animation_target_x')
+            delattr(self, 'animation_distance')
             return
         
-        self.last_update_time = current_time
-        self.pending_update = False
-        
-        # Update the split view with the current mouse position
-        self._update_split_image(slider_x)
-        
-        # Store which side the mouse is on for the click handler
-        if event.x < window_width // 2:
-            self.current_side = 'left'
-        else:
-            self.current_side = 'right'
+        # Schedule next frame (aim for 60fps - ~16.7ms per frame)
+        self.animation_id = self.root.after(16, lambda: self.animate_slider(target_x, total_duration))
 
     def _delayed_update(self, x_pos):
         """Handle delayed updates for mouse movement throttling"""
