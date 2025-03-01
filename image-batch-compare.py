@@ -252,6 +252,23 @@ class ImageBatchCompare:
             messagebox.showwarning("Warning", "Please add at least two folders for comparison.")
             return
         
+        # Load images for all folders to check counts
+        for folder in self.folders:
+            images = [f for f in os.listdir(folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
+            self.folder_images[folder] = sorted(images)
+        
+        # Check if all folders have the same number of images
+        image_counts = [len(self.folder_images[folder]) for folder in self.folders]
+        if len(set(image_counts)) > 1:
+            # Create a detailed error message showing the count for each folder
+            error_msg = "Folders must contain the same number of images:\n\n"
+            for folder in self.folders:
+                count = len(self.folder_images[folder])
+                folder_name = os.path.basename(folder)
+                error_msg += f"{folder_name}: {count} images\n"
+            messagebox.showerror("Error", error_msg)
+            return
+        
         # Maximize the window
         self.root.state('zoomed')  # This works for Windows and some Linux environments
         
