@@ -212,23 +212,25 @@ class ImageBatchCompare:
             self.save_config()
 
     def remove_folder(self):
-        selected_item = self.folder_tree.selection()
-        if selected_item:
-            folder = self.folder_tree.item(selected_item)['values'][1]  # Get path from second column
-            if folder in self.folders:
-                # Check if this is a temp directory and delete it
-                if os.path.dirname(folder) == os.environ.get('TEMP', '/tmp') and 'image_batch_' in os.path.basename(folder):
-                    try:
-                        print(f"Removing temp directory: {folder}")
-                        shutil.rmtree(folder)
-                    except Exception as e:
-                        print(f"Error removing temp directory: {e}")
-                
-                self.folders.remove(folder)
-                self.votes.pop(folder, None)
-                self.folder_images.pop(folder, None)
-                self.folder_tree.delete(selected_item)
-                self.save_config()
+        selected_items = self.folder_tree.selection()
+        if selected_items:
+            # Process each selected item individually
+            for item in selected_items:
+                folder = self.folder_tree.item(item)['values'][1]  # Get path from second column
+                if folder in self.folders:
+                    # Check if this is a temp directory and delete it
+                    if os.path.dirname(folder) == os.environ.get('TEMP', '/tmp') and 'image_batch_' in os.path.basename(folder):
+                        try:
+                            print(f"Removing temp directory: {folder}")
+                            shutil.rmtree(folder)
+                        except Exception as e:
+                            print(f"Error removing temp directory: {e}")
+                    
+                    self.folders.remove(folder)
+                    self.votes.pop(folder, None)
+                    self.folder_images.pop(folder, None)
+                    self.folder_tree.delete(item)
+            self.save_config()
 
     def add_subfolders(self):
         root_folder = filedialog.askdirectory()
@@ -396,179 +398,78 @@ class ImageBatchCompare:
                             new_width = max(1, int(window_height * aspect_ratio))
 
                         resized_img = pil_img.resize((new_width, new_height), Image.LANCZOS)
+                        photo_img = ImageTk.PhotoImage(resized_img)
                         
                         # Store the folder and path info
                         if i == 0:
-                            self.left_folder = folder
-                            self.left_path = image_path
-                            self.left_pil_img = resized_img
+                            self.left_image = (photo_img, folder, image_path)
                         else:
-                            self.right_folder = folder
-                            self.right_path = image_path
-                            self.right_pil_img = resized_img
+                            self.right_image = (photo_img, folder, image_path)
                         
                 except Exception as e:
                     print(f"Error loading image: {e}")
         
-        # Store dimensions for later use
-        if hasattr(self, 'left_pil_img'):
-            self.img_width = self.left_pil_img.width
-            self.img_height = self.left_pil_img.height
-            
-            # Pre-calculate the center position for images
-            self.x_offset = (window_width - self.img_width) // 2
-            self.y_offset = (window_height - self.img_height) // 2
-        
-        # Create the slider
-        self.slider_width = 4
-        self.slider = self.canvas.create_line(
+        # Draw a vertical line to separate the two halves of the screen
+        self.canvas.create_line(
             window_width // 2, 0, window_width // 2, window_height,
-            fill="#FFFFFF", width=self.slider_width
+            fill="#555555", width=2
         )
         
-        # Add slider handle for better visibility
-        self.slider_handle_radius = 10
-        self.slider_handle = self.canvas.create_oval(
-            window_width // 2 - self.slider_handle_radius, 
-            window_height // 2 - self.slider_handle_radius,
-            window_width // 2 + self.slider_handle_radius, 
-            window_height // 2 + self.slider_handle_radius,
-            fill="#FFFFFF", outline="#000000", width=2
-        )
-        
-        # Create a throttling mechanism for mouse movement
-        self.last_update_time = 0
-        self.update_interval = 1/60  # Target 60 FPS
-        
-        # Initially display both images with the slider in the middle
-        self.display_split_view(window_width // 2)
-        
-        # Bring text to front to ensure it overlaps the images
-        self.canvas.tag_raise(self.left_text)
-        self.canvas.tag_raise(self.right_text)
+        # Initially display based on mouse position
+        mouse_x = self.root.winfo_pointerx() - self.root.winfo_rootx()
+        if mouse_x < window_width // 2:
+            self.display_image(self.left_image)
+            self.canvas.itemconfig(self.left_text, fill="#FFFFFF")
+            self.canvas.itemconfig(self.right_text, fill="#555555")
+        else:
+            self.display_image(self.right_image)
+            self.canvas.itemconfig(self.left_text, fill="#555555")
+            self.canvas.itemconfig(self.right_text, fill="#FFFFFF")
         
         self.update_title()
         self.root.update_idletasks()
 
-    def display_split_view(self, slider_x):
-        """Display both images with a slider at the given x position"""
-        if not hasattr(self, 'left_pil_img') or not hasattr(self, 'right_pil_img'):
-            return
-        
-        window_width = self.canvas.winfo_width()
-        window_height = self.canvas.winfo_height()
-        
-        # Move the slider to the current mouse position
-        self.canvas.coords(self.slider, slider_x, 0, slider_x, window_height)
-        self.canvas.coords(
-            self.slider_handle,
-            slider_x - self.slider_handle_radius, 
-            window_height // 2 - self.slider_handle_radius,
-            slider_x + self.slider_handle_radius, 
-            window_height // 2 + self.slider_handle_radius
-        )
-        
-        # Update text colors based on slider position
-        # INVERTED: Highlight the text for the OPPOSITE image that would be chosen if clicked
-        if slider_x < window_width // 2:
-            # When slider is on the left side, highlight the RIGHT text (Image B)
-            self.canvas.itemconfig(self.left_text, fill="#555555")
-            self.canvas.itemconfig(self.right_text, fill="#FFFFFF")
-        else:
-            # When slider is on the right side, highlight the LEFT text (Image A)
-            self.canvas.itemconfig(self.left_text, fill="#FFFFFF")
-            self.canvas.itemconfig(self.right_text, fill="#555555")
-        
-        # Update the image
-        self._update_split_image(slider_x)
+    def display_image(self, image_data):
+        if image_data:
+            img, folder, image_path = image_data
+            window_width = self.canvas.winfo_width()
+            window_height = self.canvas.winfo_height()
+            
+            x = (window_width - img.width()) // 2
+            y = (window_height - img.height()) // 2
+            
+            self.canvas.delete("image")
+            self.current_image = self.canvas.create_image(x, y, anchor=tk.NW, image=img, tags="image")
+            
+            # Make sure the text and dividing line remain visible
+            self.canvas.tag_raise(self.left_text)
+            self.canvas.tag_raise(self.right_text)
+            
+            # Redraw the dividing line
+            self.canvas.delete("divider")
+            self.canvas.create_line(
+                window_width // 2, 0, window_width // 2, window_height,
+                fill="#555555", width=2, tags="divider"
+            )
 
     def on_mouse_move(self, event):
-        """Update the slider position and displayed images based on mouse position"""
+        """Update the displayed image based on mouse position"""
         window_width = self.canvas.winfo_width()
-        window_height = self.canvas.winfo_height()
         
-        # Always update the slider position immediately for responsiveness
-        slider_x = event.x
-        self.canvas.coords(self.slider, slider_x, 0, slider_x, window_height)
-        self.canvas.coords(
-            self.slider_handle,
-            slider_x - self.slider_handle_radius, 
-            window_height // 2 - self.slider_handle_radius,
-            slider_x + self.slider_handle_radius, 
-            window_height // 2 + self.slider_handle_radius
-        )
-        
-        # Update text colors based on slider position
-        # INVERTED: Highlight the text for the OPPOSITE image that would be chosen if clicked
-        if slider_x < window_width // 2:
-            # When slider is on the left side, highlight the RIGHT text (Image B)
-            self.canvas.itemconfig(self.left_text, fill="#555555")
-            self.canvas.itemconfig(self.right_text, fill="#FFFFFF")
-        else:
-            # When slider is on the right side, highlight the LEFT text (Image A)
+        if event.x < window_width // 2:
+            # When mouse is on the left side, show left image and highlight left text
+            if self.current_image != self.left_image:
+                self.display_image(self.left_image)
             self.canvas.itemconfig(self.left_text, fill="#FFFFFF")
             self.canvas.itemconfig(self.right_text, fill="#555555")
-        
-        # Throttle image updates for smoother performance
-        current_time = time.time()
-        if current_time - self.last_update_time < self.update_interval:
-            # Schedule an update for later if we're throttling
-            if not hasattr(self, 'pending_update') or not self.pending_update:
-                self.pending_update = True
-                self.root.after(int(self.update_interval * 1000), lambda: self._delayed_update(event.x))
-            return
-        
-        self.last_update_time = current_time
-        self.pending_update = False
-        
-        # Update the split view with the current mouse position
-        self._update_split_image(slider_x)
-        
-        # Store which side the mouse is on for the click handler
-        if event.x < window_width // 2:
             self.current_side = 'left'
         else:
+            # When mouse is on the right side, show right image and highlight right text
+            if self.current_image != self.right_image:
+                self.display_image(self.right_image)
+            self.canvas.itemconfig(self.left_text, fill="#555555")
+            self.canvas.itemconfig(self.right_text, fill="#FFFFFF")
             self.current_side = 'right'
-
-    def _delayed_update(self, x_pos):
-        """Handle delayed updates for mouse movement throttling"""
-        self.pending_update = False
-        self.last_update_time = time.time()
-        self._update_split_image(x_pos)
-
-    def _update_split_image(self, slider_x):
-        """Update only the composite image based on slider position"""
-        if not hasattr(self, 'left_pil_img') or not hasattr(self, 'right_pil_img'):
-            return
-        
-        # Delete previous composite image
-        self.canvas.delete("composite")
-        
-        # Calculate the split position in image coordinates
-        split_pos = slider_x - self.x_offset
-        split_pos = max(0, min(split_pos, self.img_width))
-        
-        # Create a composite image
-        composite = Image.new('RGB', (self.img_width, self.img_height))
-        
-        # Paste left image on the left side
-        left_part = self.left_pil_img.crop((0, 0, split_pos, self.img_height))
-        composite.paste(left_part, (0, 0))
-        
-        # Paste right image on the right side
-        if split_pos < self.img_width:
-            right_part = self.right_pil_img.crop((split_pos, 0, self.img_width, self.img_height))
-            composite.paste(right_part, (split_pos, 0))
-        
-        # Convert to PhotoImage and display
-        self.composite_img = ImageTk.PhotoImage(composite)
-        self.canvas.create_image(self.x_offset, self.y_offset, anchor=tk.NW, image=self.composite_img, tags="composite")
-        
-        # Bring text and slider to front
-        self.canvas.tag_raise(self.left_text)
-        self.canvas.tag_raise(self.right_text)
-        self.canvas.tag_raise(self.slider)
-        self.canvas.tag_raise(self.slider_handle)
 
     def on_mouse_press(self, event):
         self.click_start_x = event.x
@@ -587,18 +488,16 @@ class ImageBatchCompare:
                 
                 window_width = self.canvas.winfo_width()
                 
-                # INVERTED LOGIC: When clicking on the left side, we want to choose the RIGHT image
-                # When clicking on the right side, we want to choose the LEFT image
                 if event.x < window_width / 2:
-                    # User clicked on the left side of the screen - choose RIGHT image
+                    # User clicked on the left side of the screen
                     self.last_chosen_side = 'left'
-                    chosen_index = 1  # Second image in current_screen_images (right image)
-                    print(f"User chose left side, selecting right image: {self.current_screen_images[chosen_index][0]}")
-                else:
-                    # User clicked on the right side of the screen - choose LEFT image
-                    self.last_chosen_side = 'right'
                     chosen_index = 0  # First image in current_screen_images (left image)
-                    print(f"User chose right side, selecting left image: {self.current_screen_images[chosen_index][0]}")
+                    print(f"User chose left side, selecting left image: {self.current_screen_images[chosen_index][0]}")
+                else:
+                    # User clicked on the right side of the screen
+                    self.last_chosen_side = 'right'
+                    chosen_index = 1  # Second image in current_screen_images (right image)
+                    print(f"User chose right side, selecting right image: {self.current_screen_images[chosen_index][0]}")
                 
                 # Get the chosen image data directly from current_screen_images
                 chosen_folder, chosen_path = self.current_screen_images[chosen_index]
@@ -662,18 +561,6 @@ class ImageBatchCompare:
             self.display_image(self.left_image)
         else:
             self.display_image(self.right_image)
-
-    def display_image(self, image_data):
-        if image_data:
-            img, folder, image_path = image_data
-            window_width = self.canvas.winfo_width()
-            window_height = self.canvas.winfo_height()
-            
-            x = (window_width - img.width()) // 2
-            y = (window_height - img.height()) // 2
-            
-            self.canvas.delete("all")
-            self.current_image = self.canvas.create_image(x, y, anchor=tk.NW, image=img)
 
     def on_window_configure(self, event):
         # Cancel any existing timers
