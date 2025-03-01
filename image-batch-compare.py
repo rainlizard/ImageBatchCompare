@@ -377,6 +377,8 @@ class ImageBatchCompare:
         right_bbox = self.canvas.bbox(temp_right)
         left_width = left_bbox[2] - left_bbox[0]
         right_width = right_bbox[2] - right_bbox[0]
+        left_height = left_bbox[3] - left_bbox[1]
+        right_height = right_bbox[3] - right_bbox[1]
         
         # Delete temporary text objects
         self.canvas.delete(temp_left)
@@ -400,17 +402,44 @@ class ImageBatchCompare:
             right_x = center_x + min_spacing/2
             left_y = right_y = 50
         
+        # Add padding for the background rectangles
+        padding = 10
+        
+        # Create background rectangles with semi-transparent black
+        # The stipple pattern creates the transparency effect
+        self.left_bg = self.canvas.create_rectangle(
+            left_x - left_width/2 - padding,
+            left_y - left_height/2 - padding,
+            left_x + left_width/2 + padding,
+            left_y + left_height/2 + padding,
+            fill="#000000",  # Pure black
+            outline="",
+            stipple="gray50",  # This creates 50% transparency
+            tags="text_bg"
+        )
+        
+        self.right_bg = self.canvas.create_rectangle(
+            right_x - right_width/2 - padding,
+            right_y - right_height/2 - padding,
+            right_x + right_width/2 + padding,
+            right_y + right_height/2 + padding,
+            fill="#000000",  # Pure black
+            outline="",
+            stipple="gray50",  # This creates 50% transparency
+            tags="text_bg"
+        )
+        
         # Create the choice text labels
         self.left_text = self.canvas.create_text(
             left_x, left_y,
             text=left_label, 
-            fill="#555555", font=font
+            fill="#FFFFFF", font=font
         )
         
         self.right_text = self.canvas.create_text(
             right_x, right_y,
             text=right_label, 
-            fill="#555555", font=font
+            fill="#FFFFFF", font=font
         )
         
         # Load both images as PIL images
@@ -457,11 +486,15 @@ class ImageBatchCompare:
         if mouse_x < window_width // 2:
             self.display_image(self.left_image)
             self.canvas.itemconfig(self.left_text, fill="#FFFFFF")
-            self.canvas.itemconfig(self.right_text, fill="#555555")
+            self.canvas.itemconfig(self.right_text, fill="#BBBBBB")  # Darker inactive text
+            self.canvas.itemconfig(self.left_bg, stipple="gray25")   # 75% opaque black
+            self.canvas.itemconfig(self.right_bg, stipple="gray75")  # 25% opaque black
         else:
             self.display_image(self.right_image)
-            self.canvas.itemconfig(self.left_text, fill="#555555")
+            self.canvas.itemconfig(self.left_text, fill="#BBBBBB")   # Darker inactive text
             self.canvas.itemconfig(self.right_text, fill="#FFFFFF")
+            self.canvas.itemconfig(self.left_bg, stipple="gray75")   # 25% opaque black
+            self.canvas.itemconfig(self.right_bg, stipple="gray25")  # 75% opaque black
         
         self.update_title()
         self.root.update_idletasks()
@@ -478,7 +511,8 @@ class ImageBatchCompare:
             self.canvas.delete("image")
             self.current_image = self.canvas.create_image(x, y, anchor=tk.NW, image=img, tags="image")
             
-            # Make sure the text and dividing line remain visible
+            # Make sure the text, backgrounds, and dividing line remain visible
+            self.canvas.tag_raise("text_bg")
             self.canvas.tag_raise(self.left_text)
             self.canvas.tag_raise(self.right_text)
             
@@ -498,14 +532,20 @@ class ImageBatchCompare:
             if self.current_image != self.left_image:
                 self.display_image(self.left_image)
             self.canvas.itemconfig(self.left_text, fill="#FFFFFF")
-            self.canvas.itemconfig(self.right_text, fill="#555555")
+            self.canvas.itemconfig(self.right_text, fill="#444444")  # Darker inactive text
+            # For active side: less stippling = more opaque black background
+            self.canvas.itemconfig(self.left_bg, stipple="gray75")   # 75% opaque black
+            self.canvas.itemconfig(self.right_bg, stipple="gray75")  # 25% opaque black
             self.current_side = 'left'
         else:
             # When mouse is on the right side, show right image and highlight right text
             if self.current_image != self.right_image:
                 self.display_image(self.right_image)
-            self.canvas.itemconfig(self.left_text, fill="#555555")
+            self.canvas.itemconfig(self.left_text, fill="#444444")   # Darker inactive text
             self.canvas.itemconfig(self.right_text, fill="#FFFFFF")
+            # For active side: less stippling = more opaque black background
+            self.canvas.itemconfig(self.left_bg, stipple="gray75")   # 25% opaque black
+            self.canvas.itemconfig(self.right_bg, stipple="gray75")  # 75% opaque black
             self.current_side = 'right'
 
     def on_mouse_press(self, event):
