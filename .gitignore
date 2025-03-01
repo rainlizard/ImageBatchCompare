@@ -1,0 +1,27 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+.env/
+.ENV/
+
+# VS Code settings
+.vscode/
+ibc-settings.json
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Application specific
+image-batch-compare.json
+
+# Logs
+*.log 

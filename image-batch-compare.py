@@ -47,7 +47,7 @@ class ImageBatchCompare:
         self.current_index = 0
         self.winner_position = None
         
-        self.config_file = "image-batch-compare.json"
+        self.config_file = "ibc-settings.json"
         self.load_config()
         
         self.root.bind("<BackSpace>", self.skip_current_selection)
