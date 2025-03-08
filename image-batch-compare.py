@@ -49,6 +49,7 @@ class ImageBatchCompare:
         self.winner_position = None
         
         self.config_file = "ibc-settings.json"
+        self.last_directory = None
         self.load_config()
         
         # Create results directory if it doesn't exist
@@ -193,7 +194,9 @@ class ImageBatchCompare:
             with open(self.config_file, 'r') as f:
                 config = json.load(f)
                 self.folders = []
-                for folder in config.get('folders', []):
+                # Use new key name, but fall back to old one for backwards compatibility
+                folder_list = config.get('comparison_folders', config.get('folders', []))
+                for folder in folder_list:
                     if os.path.exists(folder):
                         self.folders.append(folder)
                         self.votes[folder] = 0
@@ -201,23 +204,46 @@ class ImageBatchCompare:
                         self.folder_images[folder] = sorted(images)
                     else:
                         print(f"Warning: Folder '{folder}' not found. Skipping.")
+                
+                # Use new key name, but fall back to old one for backwards compatibility
+                last_dir = config.get('last_browsed_directory', config.get('last_directory'))
+                if last_dir:
+                    # If the last directory doesn't exist, find the closest existing parent
+                    self.last_directory = self.find_existing_parent_directory(last_dir)
+                else:
+                    self.last_directory = None
             
             if not self.folders:
                 print("No valid folders found in the configuration.")
 
     def save_config(self):
-        config = {'folders': [folder for folder in self.folders if os.path.exists(folder)]}
+        config = {
+            'comparison_folders': [folder for folder in self.folders if os.path.exists(folder)],
+            'last_browsed_directory': self.last_directory
+        }
         with open(self.config_file, 'w') as f:
             json.dump(config, f)
 
+    def find_existing_parent_directory(self, path):
+        """Traverse up the directory tree until finding an existing directory"""
+        if not path:
+            return os.path.expanduser("~")
+        
+        current_path = path
+        while current_path and not os.path.exists(current_path):
+            current_path = os.path.dirname(current_path)
+        
+        return current_path if current_path else os.path.expanduser("~")
+
     def add_folder(self):
-        folder = filedialog.askdirectory()
-        if folder and folder not in self.folders:
-            self.folders.append(folder)
-            self.votes[folder] = 0
-            
-            # Insert with folder icon and tag
-            item_id = self.folder_tree.insert("", "end", values=("📂", folder), tags=('folder_icon',))
+        initial_dir = self.find_existing_parent_directory(self.last_directory)
+        folder = filedialog.askdirectory(initialdir=initial_dir)
+        if folder:
+            self.last_directory = folder  # Store the selected folder, not its parent
+            if folder not in self.folders:
+                self.folders.append(folder)
+                self.votes[folder] = 0
+                item_id = self.folder_tree.insert("", "end", values=("📂", folder), tags=('folder_icon',))
             self.save_config()
 
     def remove_folder(self):
@@ -242,8 +268,10 @@ class ImageBatchCompare:
             self.save_config()
 
     def add_subfolders(self):
-        root_folder = filedialog.askdirectory()
+        initial_dir = self.find_existing_parent_directory(self.last_directory)
+        root_folder = filedialog.askdirectory(initialdir=initial_dir)
         if root_folder:
+            self.last_directory = root_folder  # Store the selected folder, not its parent
             subfolders = [os.path.join(root_folder, d) for d in os.listdir(root_folder) 
                           if os.path.isdir(os.path.join(root_folder, d))]
             for folder in subfolders:
