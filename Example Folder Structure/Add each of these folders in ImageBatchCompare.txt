@@ -1,0 +1,11 @@
+For this example:
+
+1. Open Image Batch Comparison tool
+2. Click 'Add Folder' then navigate to this Example Folder Structure
+3. Add each directory
+4. Then click "Start Comparison"
+
+You can also use 'Add subfolders' to add all folders at once. Or drag folders into the window.
+
+The precise filenames of each file don't matter. Only the order of the files matters, so that the order is the same across each folder.
+But you should give accurate names to each folder name, as the final score tells you which folder name recieved the most points.
