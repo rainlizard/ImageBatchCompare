@@ -12,11 +12,51 @@ import shutil
 import subprocess
 import datetime
 
+# Add support for PyInstaller
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# Initialize tkdnd
+if getattr(sys, 'frozen', False):
+    os.environ['TKDND_LIBRARY'] = resource_path('tkdnd')
+    if sys.platform == 'win32':
+        os.environ['TCL_LIBRARY'] = resource_path('tcl')
+        os.environ['TK_LIBRARY'] = resource_path('tk')
+
+# Now import tkinterdnd2
+try:
+    from tkinterdnd2 import *
+except ImportError:
+    print("Error: Could not import tkinterdnd2")
+    # Fallback to regular tkinter without drag and drop
+    TkinterDnD = tk
+    print("Warning: Drag and drop functionality will not be available")
+
 class ImageBatchCompare:
     def __init__(self):
-        self.root = TkinterDnD.Tk()
+        # Initialize root window based on whether tkinterdnd2 is available
+        try:
+            self.root = TkinterDnD.Tk()
+        except:
+            self.root = tk.Tk()
+            print("Warning: Using fallback Tk implementation without drag and drop support")
+        
         self.root.title("Image Batch Compare")
         self.root.geometry("1440x720")
+        
+        # Set the window icon
+        try:
+            icon_path = resource_path("icon.png")
+            icon_image = ImageTk.PhotoImage(file=icon_path)
+            self.root.iconphoto(True, icon_image)
+        except Exception as e:
+            print(f"Warning: Could not load application icon: {e}")
         
         # Reintroduce the call to set_dpi_awareness
         self.set_dpi_awareness()
