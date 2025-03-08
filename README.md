@@ -3,6 +3,7 @@
 A tool that compares sets of images to identify the best group of images.
 
 ## Overview
+
 If you're into local image generation it can be difficult to tell if the small adjustments you're making actually improve the quality of the output, it's common to end up squinting at two images side by side, playing spot-the-difference. Even when you do choose the better image, a single comparison is rarely enough - you need dozens to be sure the improvements are real and consistent or whether you're being misled by random seed variation. And your judgement may be affected by bias for whatever reason.
 
 ## What This Tool Does
