@@ -34,6 +34,19 @@ If you're into local image generation it can be difficult to tell if the small a
 4. For each pair of images shown, select the one you prefer
 5. At the end, you will be shown which folder had the most winning images
 
+## Compatibility
+
+### Windows
+- **Without Python**: Run `ImageBatchCompare.exe`
+- **Or with Python**: Run `start.bat`
+
+### Linux
+Untested but probably compatible if you launch the Python file:
+```bash
+pip install -r requirements.txt
+python image-batch-compare.py
+```
+
 ## License
 
 [MIT License](LICENSE)
