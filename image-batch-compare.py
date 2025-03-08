@@ -684,15 +684,84 @@ class ImageBatchCompare:
             _, folder, image_path = chosen_image
             self.vote(folder, image_path)
 
+    def create_checkmark_animation(self, x, y):
+        """Create a smooth, aesthetically pleasing text checkmark animation"""
+        print(f"Creating checkmark at {x}, {y}")
+        
+        # Delete any existing checkmarks first
+        self.canvas.delete("feedback_checkmark")
+        
+        # Create the checkmark with a brighter, more positive green color
+        base_size = 288  # 72 * 4 = 288
+        checkmark = self.canvas.create_text(
+            x, y,
+            text="✓",  # Unicode checkmark
+            fill='#4CD964',  # Brighter, more positive green color (iOS-style green)
+            font=('Helvetica', base_size, 'bold'),  # Large, bold font
+            anchor='center',
+            tags=("feedback_checkmark", "top")
+        )
+        
+        # Raise ALL items with the "top" tag above everything else
+        self.canvas.tag_raise("top")
+        
+        # Make sure our UI elements stay on top too
+        self.canvas.tag_raise("text_bg")
+        self.canvas.tag_raise(self.left_text)
+        self.canvas.tag_raise(self.right_text)
+        
+        # Create smooth fade-out animation
+        steps = 15  # More steps for smoother fade
+        duration = 500  # Total duration in ms
+        interval = duration // steps
+        
+        def fade_step(step):
+            if step < steps:
+                # Use easing function for smoother fade
+                progress = step / steps
+                ease = 1 - (progress * progress)  # Quadratic ease-out
+                
+                # Calculate color with easing
+                green_val = int(217 * ease)   # From #D9 (217)
+                red_val = int(76 * ease)      # From #4C (76)
+                blue_val = int(100 * ease)    # From #64 (100)
+                
+                color = f'#{red_val:02x}{green_val:02x}{blue_val:02x}'
+                
+                # Scale the font size for a subtle "pop" effect
+                scale = 1 + (0.2 * (1 - ease))  # Scale from 1.0 to 1.2 and back
+                font_size = int(base_size * scale)
+                
+                self.canvas.itemconfig(
+                    checkmark,
+                    fill=color,
+                    font=('Helvetica', font_size, 'bold')
+                )
+                
+                # Schedule next fade step
+                self.root.after(interval, lambda: fade_step(step + 1))
+            else:
+                # Delete the checkmark after fade completes
+                self.canvas.delete("feedback_checkmark")
+        
+        # Start the fade animation
+        fade_step(0)
+
     def vote(self, chosen_folder, chosen_image_path):
         print(f"Vote called for folder: {chosen_folder}")
         print(f"Image path: {chosen_image_path}")
         print(f"Before vote - Current votes: {self.votes}")
         
-        # Store the winner as a tuple of (folder, image_path)
-        self.subgroup_winner = (chosen_folder, chosen_image_path)
+        # Create checkmark animation FIRST
+        mouse_x = self.root.winfo_pointerx() - self.root.winfo_rootx()
+        mouse_y = self.root.winfo_pointery() - self.root.winfo_rooty()
+        self.create_checkmark_animation(mouse_x, mouse_y)
         
-        # Increment counters
+        # Force an immediate update of the canvas
+        self.canvas.update_idletasks()
+        
+        # Now handle the rest of the vote logic
+        self.subgroup_winner = (chosen_folder, chosen_image_path)
         self.current_comparison += 1
         self.current_pair_index += 1
         self.comparisons_within_subgroup += 1
