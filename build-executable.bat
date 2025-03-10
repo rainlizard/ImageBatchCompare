@@ -19,6 +19,7 @@ echo Building executable...
 pyinstaller --noconfirm --onefile ^
     --windowed ^
     --icon="icon.png" ^
+    --add-data "icon.png;." ^
     --distpath "." ^
     --name "ImageBatchCompare" ^
     --collect-all tkinterdnd2 ^

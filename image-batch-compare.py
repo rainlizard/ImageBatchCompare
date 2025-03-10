@@ -56,7 +56,12 @@ class ImageBatchCompare:
         # Set the window icon
         try:
             icon_path = resource_path("icon.png")
-            icon_image = ImageTk.PhotoImage(file=icon_path)
+            if hasattr(sys, '_MEIPASS'):  # Check if running as executable
+                # Load icon directly from the executable's temporary directory
+                icon_image = ImageTk.PhotoImage(file=icon_path)
+            else:
+                # Load icon normally when running as script
+                icon_image = ImageTk.PhotoImage(file="icon.png")
             self.root.iconphoto(True, icon_image)
         except Exception as e:
             print(f"Warning: Could not load application icon: {e}")
@@ -95,10 +100,8 @@ class ImageBatchCompare:
         self.last_directory = None
         self.load_config()
         
-        # Create results directory if it doesn't exist
+        # Define results directory name but don't create it yet
         self.results_dir = "Results"
-        if not os.path.exists(self.results_dir):
-            os.makedirs(self.results_dir)
         
         self.root.bind("<BackSpace>", self.skip_current_selection)
 
@@ -852,6 +855,10 @@ class ImageBatchCompare:
 
     def save_results_to_file(self):
         """Save the comparison results to a timestamped text file in the Results folder."""
+        # Create the Results directory only when needed
+        if not os.path.exists(self.results_dir):
+            os.makedirs(self.results_dir)
+            
         # Create a timestamp for the filename
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         result_file_name = f"comparison_results_{timestamp}.txt"
