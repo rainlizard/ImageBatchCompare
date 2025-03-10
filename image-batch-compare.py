@@ -12,6 +12,9 @@ import shutil
 import subprocess
 import datetime
 
+# Version constant
+VERSION = "1.00"
+
 # Add support for PyInstaller
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -146,6 +149,7 @@ class ImageBatchCompare:
         self.main_frame.grid(row=0, column=0, sticky="nsew")
         self.main_frame.grid_columnconfigure(0, weight=1)
         self.main_frame.grid_rowconfigure(1, weight=1)
+        self.main_frame.grid_rowconfigure(2, weight=0)
 
         self.control_frame = ttk.Frame(self.main_frame)
         self.control_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=10)
@@ -228,6 +232,15 @@ class ImageBatchCompare:
 
         # Add right-click binding to the folder tree
         self.folder_tree.bind("<Button-3>", self.on_right_click)
+
+        # Add version label at the bottom
+        version_label = ttk.Label(
+            self.main_frame, 
+            text=f"v{VERSION}", 
+            font=('Helvetica', self.get_font_size(0.6)),
+            foreground='#666666'  # Gray color
+        )
+        version_label.grid(row=2, column=0, sticky="se", padx=10, pady=5)
 
     def load_config(self):
         if os.path.exists(self.config_file):
