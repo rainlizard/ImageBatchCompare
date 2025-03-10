@@ -37,11 +37,11 @@ If you do local image generation it can be difficult to tell if the small adjust
 4. For each pair of images shown, select the one you prefer
 5. At the end, you will be shown which folder had the most winning images
 
-## Compatibility
+## Installation
 
 ### Windows
-- **Without Python**: Run `ImageBatchCompare.exe`
-- **Or with Python**: Run `start.bat`
+- **Without Python**: Download the [latest release](https://github.com/rainlizard/ImageBatchCompare/releases) and run the executable.
+- **Or with Python**: Clone the source code and run `start.bat`
 
 ### Linux
 Untested but probably compatible if you launch the Python file:
