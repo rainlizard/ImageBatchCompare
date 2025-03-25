@@ -13,7 +13,7 @@ import subprocess
 import datetime
 
 # Version constant
-VERSION = "1.00"
+VERSION = "1.01"
 
 # Add support for PyInstaller
 def resource_path(relative_path):
@@ -359,8 +359,19 @@ class ImageBatchCompare:
             messagebox.showerror("Error", error_msg)
             return
         
-        # Maximize the window
-        self.root.state('zoomed')  # This works for Windows and some Linux environments
+        # Attempt to maximize the window in a cross-platform way
+        try:
+            # For Windows
+            if sys.platform == 'win32':
+                self.root.state('zoomed')
+            # For Linux/macOS, use geometry approach to maximize
+            else:
+                w, h = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+                self.root.geometry(f"{w}x{h}+0+0")
+        except Exception as e:
+            print(f"Warning: Could not maximize window: {e}")
+            # Fallback to normal state if maximizing fails
+            self.root.state('normal')
         
         # Use after method to delay the start of comparison
         self.root.after(100, self._start_comparison_after_maximize)
@@ -395,8 +406,12 @@ class ImageBatchCompare:
             self.root.title("Image Batch Compare")
 
     def stop_comparison(self):
-        # Restore the window to its original size
-        self.root.state('normal')
+        # Restore the window to its original size in a cross-platform way
+        try:
+            self.root.state('normal')
+        except Exception as e:
+            print(f"Warning: Could not restore window state: {e}")
+            # No need for fallback here - if it fails, just continue
         
         self.image_frame.grid_remove()
         self.main_frame.grid()
